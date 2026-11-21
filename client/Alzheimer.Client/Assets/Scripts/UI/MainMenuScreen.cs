@@ -33,7 +33,7 @@ namespace Alzheimer.Client.UI
         {
             _status.text = message;
             Debug.Log("Alzheimer menu: " + message);
-            var network = FindObjectOfType<NetworkManager>();
+            var network = Object.FindAnyObjectByType<NetworkManager>();
             if (network != null)
                 network.Disconnect();
         }

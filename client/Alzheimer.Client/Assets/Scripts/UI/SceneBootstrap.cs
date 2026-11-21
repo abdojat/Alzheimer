@@ -15,14 +15,14 @@ namespace Alzheimer.Client.UI
             EnsureCamera();
             EnsureEventSystem();
 
-            if (FindObjectOfType<GameManager>() == null)
+            if (Object.FindAnyObjectByType<GameManager>() == null)
             {
                 var gameManager = new GameObject("GameManager");
                 gameManager.AddComponent<GameManager>();
                 gameManager.AddComponent<ReactionTimerController>();
             }
 
-            if (FindObjectOfType<NetworkManager>() == null)
+            if (Object.FindAnyObjectByType<NetworkManager>() == null)
             {
                 var networkManager = new GameObject("NetworkManager");
                 networkManager.AddComponent<NetworkManager>();
@@ -43,7 +43,7 @@ namespace Alzheimer.Client.UI
 
         private static void EnsureEventSystem()
         {
-            if (FindObjectOfType<EventSystem>() != null) return;
+            if (Object.FindAnyObjectByType<EventSystem>() != null) return;
             var eventSystem = new GameObject("EventSystem");
             eventSystem.AddComponent<EventSystem>();
             eventSystem.AddComponent<StandaloneInputModule>();

@@ -52,11 +52,22 @@
     <Analyzer Include="C:\Program Files\Unity\Hub\Editor\6000.6.10f1\Editor\Data\BCLExtensions\TargetingPacks\netstandard2.1\analyzers\dotnet\roslyn4.0\cs\System.Text.Json.SourceGeneration.dll" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Assets\Scripts\Core\TurnManager.cs" />
+    <Compile Include="Assets\Scripts\UI\SafeArea.cs" />
     <Compile Include="Assets\Scripts\Game\GameManager.cs" />
+    <Compile Include="Assets\Scripts\UI\SceneBootstrap.cs" />
+    <Compile Include="Assets\Scripts\Networking\NetworkManager.cs" />
+    <Compile Include="Assets\Scripts\UI\CardInteractionController.cs" />
+    <Compile Include="Assets\Scripts\UI\MainMenuScreen.cs" />
+    <Compile Include="Assets\Scripts\UI\CardView.cs" />
     <Compile Include="Assets\Scripts\Game\ReactionTimerController.cs" />
+    <Compile Include="Assets\Scripts\Networking\INetworkService.cs" />
+    <Compile Include="Assets\Scripts\Core\GameState.cs" />
+    <Compile Include="Assets\Scripts\Core\PlayerState.cs" />
+    <Compile Include="Assets\Scripts\UI\GameTableScreen.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="Assets\Scripts\Game\Alzheimer.Client.asmdef" />
+    <None Include="Assets\Scripts\Alzheimer.Client.asmdef" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="UnityEngine">
@@ -587,8 +598,16 @@
       <HintPath>C:\Program Files\Unity\Hub\Editor\6000.6.10f1\Editor\Data\PlaybackEngines\WindowsStandaloneSupport\UnityEditor.WindowsStandalone.Extensions.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Unity.Collections.LowLevel.ILSupport">
+      <HintPath>Library\PackageCache\com.unity.collections@c70d71c1212e\Unity.Collections.LowLevel.ILSupport\Unity.Collections.LowLevel.ILSupport.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="nunit.framework">
       <HintPath>Library\PackageCache\com.unity.ext.nunit@0198eae3b53e\net472\unity-custom\nunit.framework.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Mono.Cecil">
+      <HintPath>Library\PackageCache\com.unity.nuget.mono-cecil@ecb9724e46ff\Mono.Cecil.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="netstandard">

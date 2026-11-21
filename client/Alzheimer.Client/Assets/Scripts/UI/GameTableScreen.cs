@@ -41,7 +41,7 @@ namespace Alzheimer.Client.UI
 
             CreateButton(panel.transform, "Back", "BACK", 42, new Vector2(0.5f, 0.09f), () => SceneManager.LoadScene("MainMenu"));
 
-            var timerController = FindObjectOfType<ReactionTimerController>();
+            var timerController = Object.FindAnyObjectByType<ReactionTimerController>();
             if (timerController != null)
             {
                 timerController.StartTimer(30f);
