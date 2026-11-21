@@ -4,11 +4,14 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using UnityEngine.InputSystem.UI;
 
 namespace Alzheimer.Client.UI
 {
     public static class SceneBootstrap
     {
+        private static EventSystem _persistentEventSystem;
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Initialize()
         {
@@ -43,10 +46,38 @@ namespace Alzheimer.Client.UI
 
         private static void EnsureEventSystem()
         {
-            if (Object.FindAnyObjectByType<EventSystem>() != null) return;
-            var eventSystem = new GameObject("EventSystem");
-            eventSystem.AddComponent<EventSystem>();
-            eventSystem.AddComponent<StandaloneInputModule>();
+            var eventSystems = Object.FindObjectsByType<EventSystem>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            EventSystem primary = _persistentEventSystem;
+            if (primary == null)
+                primary = eventSystems.Length > 0 ? eventSystems[0] : null;
+
+            foreach (var eventSystem in eventSystems)
+            {
+                if (eventSystem != null && eventSystem != primary)
+                    Object.Destroy(eventSystem.gameObject);
+            }
+
+            if (primary == null)
+            {
+                var eventSystemObject = new GameObject("EventSystem");
+                primary = eventSystemObject.AddComponent<EventSystem>();
+            }
+
+            _persistentEventSystem = primary;
+            Object.DontDestroyOnLoad(primary.gameObject);
+
+            var legacyModules = primary.GetComponents<BaseInputModule>();
+            foreach (var legacyModule in legacyModules)
+            {
+                if (legacyModule is not InputSystemUIInputModule)
+                    Object.Destroy(legacyModule);
+            }
+
+            var uiModule = primary.GetComponent<InputSystemUIInputModule>();
+            if (uiModule == null)
+                uiModule = primary.gameObject.AddComponent<InputSystemUIInputModule>();
+
+            uiModule.AssignDefaultActions();
         }
 
         private static void BuildForScene(string sceneName)
