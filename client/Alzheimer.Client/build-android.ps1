@@ -17,7 +17,7 @@ if (-not $UnityExe) {
     foreach ($candidate in $candidates) {
         if (Test-Path $candidate) {
             $match = Get-ChildItem $candidate -Filter Unity.exe -Recurse -ErrorAction SilentlyContinue |
-                Where-Object { $_.FullName -match "6000\.3" } |
+                Where-Object { $_.FullName -match "6000\." } |
                 Select-Object -First 1
             if ($match) { $UnityExe = $match.FullName }
         }

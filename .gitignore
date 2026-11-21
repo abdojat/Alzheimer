@@ -6,6 +6,12 @@
 [Bb]uilds/
 [Ll]ogs/
 UserSettings/
+MemoryCaptures/
+Recordings/
+*.apk
+*.aab
+*.apk.*
+*.unitypackage
 *.csproj.user
 *.slnx.user
 # .NET / IDE

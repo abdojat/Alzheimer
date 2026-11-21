@@ -43,7 +43,7 @@ namespace Alzheimer.Client.Editor
         {
             EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android);
             PlayerSettings.SetApplicationIdentifier(
-                BuildTargetGroup.Android,
+                NamedBuildTarget.Android,
                 "com.yourstudio.alzheimer");
             PlayerSettings.productName = "Alzheimer";
             PlayerSettings.defaultInterfaceOrientation = UIOrientation.Portrait;
@@ -55,7 +55,7 @@ namespace Alzheimer.Client.Editor
                 NamedBuildTarget.Android,
                 ScriptingImplementation.IL2CPP);
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
-            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel24;
+            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel26;
             EditorUserBuildSettings.development = true;
             EditorUserBuildSettings.androidBuildType = AndroidBuildType.Debug;
 

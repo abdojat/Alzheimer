@@ -46,12 +46,44 @@ Hub events: `RoomUpdated` and `RoomClosed`. The server uses in-memory state and 
 
 ## Create the Unity application
 
-1. Open Unity Hub -> New project -> **2D** template, editor Unity 6.3 LTS.
-2. Name project `Alzheimer.Client` and create it **outside or alongside** this repository, then move its folder under `client/Alzheimer.Client` if desired. Do not try to open the repository root as an existing Unity project.
-3. Copy `unity/StarterCardTable.cs` into your Unity project's `Assets/Scripts/` folder.
-4. Open a blank scene -> create Empty GameObject `Starter` -> Add Component -> `StarterCardTable` -> press Play.
-5. The simple debug screen shows four card backs and a mock `Draw` button. It is only a UI sanity check and doesn't simulate game rules.
-6. For Android: File -> Build Profiles (or Build Settings if shown) -> Android -> Switch Platform. Connect your device with USB debugging and use Build and Run once the Android modules are installed.
+The generated Unity project is at `client/Alzheimer.Client`.
+
+1. Open Unity Hub and choose **Open** -> `D:\Users\abdal\Desktop\Alzheimer\client\Alzheimer.Client`.
+2. Use Unity **6000.3.0** or Unity 6.3 LTS. Let Package Manager restore packages.
+3. Open `Assets/Scenes/MainMenu.unity` and press **Play**.
+4. Use `PLAY` to open the local `Assets/Scenes/GameTable.unity` preview.
+5. The card table displays four face-down cards; tapping a card selects it and updates the status text.
+
+The generated UI uses uGUI, a 1080×1920 Scale With Screen Size canvas, safe-area handling, and portrait layout. The starter script remains outside the Unity project for reference; the runtime UI is implemented in `Assets/Scripts/UI/`.
+
+## Android build
+
+1. In Unity Hub, open the project and install Android Build Support with SDK/NDK and JDK if prompted.
+2. Install Android 7.0/API 24 or newer SDK support.
+3. Enable USB debugging on the phone and accept the computer authorization prompt.
+4. In Unity use **File -> Build Profiles**, select Android, switch platform, then build.
+5. Automated build from Windows PowerShell:
+
+```powershell
+cd D:\Users\abdal\Desktop\Alzheimer\client\Alzheimer.Client
+.\build-android.ps1
+```
+
+If the Unity executable is not auto-detected:
+
+```powershell
+.\build-android.ps1 -UnityExe "C:\Program Files\Unity\Hub\Editor\6000.3.0f1\Editor\Unity.exe"
+```
+
+The development IL2CPP/ARM64 APK is written to `D:\Users\abdal\Desktop\Alzheimer\builds\android\Alzheimer.apk`.
+
+To install over USB:
+
+```powershell
+adb install -r D:\Users\abdal\Desktop\Alzheimer\builds\android\Alzheimer.apk
+```
+
+Generated `Library`, `Temp`, `Logs`, build folders, APK/AAB files, and caches are excluded by `.gitignore`.
 
 ## Suggested repository layout after importing Unity
 
