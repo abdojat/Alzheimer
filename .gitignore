@@ -1,0 +1,23 @@
+# Unity
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+UserSettings/
+*.csproj.user
+*.slnx.user
+# .NET / IDE
+**/bin/
+**/obj/
+.vs/
+.vscode/*.log
+.idea/
+# Credentials
+.env
+.env.*
+!*.example
+# OS
+.DS_Store
+Thumbs.db
