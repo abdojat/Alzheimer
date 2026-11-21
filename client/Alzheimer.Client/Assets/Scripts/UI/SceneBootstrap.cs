@@ -4,7 +4,6 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
-using UnityEngine.InputSystem.UI;
 
 namespace Alzheimer.Client.UI
 {
@@ -46,7 +45,7 @@ namespace Alzheimer.Client.UI
 
         private static void EnsureEventSystem()
         {
-            var eventSystems = Object.FindObjectsByType<EventSystem>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var eventSystems = Object.FindObjectsByType<EventSystem>(FindObjectsInactive.Include);
             EventSystem primary = _persistentEventSystem;
             if (primary == null)
                 primary = eventSystems.Length > 0 ? eventSystems[0] : null;
@@ -66,18 +65,11 @@ namespace Alzheimer.Client.UI
             _persistentEventSystem = primary;
             Object.DontDestroyOnLoad(primary.gameObject);
 
-            var legacyModules = primary.GetComponents<BaseInputModule>();
-            foreach (var legacyModule in legacyModules)
-            {
-                if (legacyModule is not InputSystemUIInputModule)
-                    Object.Destroy(legacyModule);
-            }
+            var inputModules = primary.GetComponents<BaseInputModule>();
+            foreach (var inputModule in inputModules)
+                Object.Destroy(inputModule);
 
-            var uiModule = primary.GetComponent<InputSystemUIInputModule>();
-            if (uiModule == null)
-                uiModule = primary.gameObject.AddComponent<InputSystemUIInputModule>();
-
-            uiModule.AssignDefaultActions();
+            primary.gameObject.AddComponent<StandaloneInputModule>();
         }
 
         private static void BuildForScene(string sceneName)
