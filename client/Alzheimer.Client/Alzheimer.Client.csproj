@@ -60,6 +60,7 @@
     <Compile Include="Assets\Scripts\UI\CardInteractionController.cs" />
     <Compile Include="Assets\Scripts\UI\MainMenuScreen.cs" />
     <Compile Include="Assets\Scripts\UI\CardView.cs" />
+    <Compile Include="Assets\Scripts\UI\RuntimeSceneUi.cs" />
     <Compile Include="Assets\Scripts\Game\ReactionTimerController.cs" />
     <Compile Include="Assets\Scripts\Networking\INetworkService.cs" />
     <Compile Include="Assets\Scripts\Core\GameState.cs" />
@@ -1136,6 +1137,10 @@
     </Reference>
     <Reference Include="System.Text.Json">
       <HintPath>C:\Program Files\Unity\Hub\Editor\6000.6.10f1\Editor\Data\BCLExtensions\TargetingPacks\netstandard2.1\ref\System.Text.Json.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.InputSystem">
+      <HintPath>Library\ScriptAssemblies\Unity.InputSystem.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEditor.UI">

@@ -1,0 +1,19 @@
+{
+  "name": "Alzheimer.Client.Tests",
+  "rootNamespace": "Alzheimer.Client.Tests",
+  "references": [
+    "Alzheimer.Client",
+    "Unity.InputSystem",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

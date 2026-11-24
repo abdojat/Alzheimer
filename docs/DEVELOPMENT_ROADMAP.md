@@ -16,13 +16,13 @@
 ## P0 — stabilize the Unity prototype
 
 1. [x] Inspected Unity project version (`6000.6.10f1`), input settings, package manifest, scene bootstrap and scene generator.
-2. [x] Declared `com.unity.inputsystem` 1.14.2, referenced its assembly, retained `activeInputHandler: 1`, and replaced runtime `StandaloneInputModule` with `InputSystemUIInputModule`.
-3. [ ] Repeated scene-transition runtime validation is implemented by a `sceneLoaded` subscription and runtime-canvas marker/deduplication, but remains unexecuted because the installed Editor is unlicensed in batch mode.
-4. [ ] Source/configuration validation prepared; Editor Play Mode and 9:16/touch checks remain unexecuted because the Editor cannot be licensed in this environment.
-5. Run core smoke tests and server build; if Unity Editor is available, run Editor validation and Android build (`client/Alzheimer.Client/build-android.ps1`) and report actual outcomes.
-6. Fix README version mismatch (`README.md` currently mentions Unity 6.3/API 24 while current project is Unity 6.6/min API 26); update docs to observed state.
+2. [x] Declared `com.unity.inputsystem` 1.14.2, referenced its assembly, retained `activeInputHandler: 1`, and configure `InputSystemUIInputModule` for mouse and touch through the default UI actions.
+3. [x] Replaced runtime `DestroyImmediate()` calls with lifecycle-safe `Destroy()` or object reuse/deactivation. The bootstrap reconciles one EventSystem, one runtime UI canvas, and one set of persistent managers.
+4. [x] Added static-state and `sceneLoaded` reset handling for Enter/Exit Play Mode and disabled domain reload. Added repeated-transition Play Mode tests.
+5. [ ] Repeated scene-transition runtime execution, Editor compilation, 9:16/touch validation, and automated Unity tests remain blocked. Unity resolves a Personal entitlement. Script compilation exposed `com.unity.inputsystem@1.14.2` as incompatible with Unity `6000.6.10f1` APIs (CS0619 obsolete-API errors). The manifest has been updated to the 6000.6-compatible `1.20.1`; a bounded re-run restored the stale lock/cache state and did not execute tests, so package-lock restoration and test execution remain manual/Editor validation work.
+6. [ ] Development Android APK generation remains blocked by the licensing problem.
 
-**P0 acceptance:** Unity source changes and Android settings are prepared, but Unity package restore, compilation, repeated navigation, touch/mouse input, and APK generation remain blocked by the machine's missing Unity license entitlement. Existing .NET tests pass. No fake online buttons were added.
+**P0 acceptance:** P0 is **blocked**, not completed. The Unity source/configuration and lifecycle test implementation are prepared, but Unity compilation, repeated runtime navigation, mouse/touch input, and APK generation have no passing runtime evidence. Existing .NET smoke tests and server build must be verified in the final validation pass. No fake online buttons or gameplay completion are included.
 
 ## P1 — deterministic server-authoritative round engine
 

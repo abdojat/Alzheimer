@@ -10,6 +10,12 @@ namespace Alzheimer.Client.Networking
         public bool IsConnected { get; private set; }
         public event Action<string> StatusChanged;
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStaticState()
+        {
+            Instance = null;
+        }
+
         private void Awake()
         {
             if (Instance != null && Instance != this)

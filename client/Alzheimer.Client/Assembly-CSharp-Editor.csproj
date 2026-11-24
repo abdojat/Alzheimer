@@ -1316,6 +1316,10 @@
       <HintPath>Library\ScriptAssemblies\Unity.SurfaceCache.Runtime.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Unity.InputSystem.ForUI.Editor">
+      <HintPath>Library\ScriptAssemblies\Unity.InputSystem.ForUI.Editor.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Unity.Collections">
       <HintPath>Library\ScriptAssemblies\Unity.Collections.dll</HintPath>
       <Private>False</Private>
@@ -1338,6 +1342,10 @@
     </Reference>
     <Reference Include="Unity.RenderPipelines.Universal.Shaders">
       <HintPath>Library\ScriptAssemblies\Unity.RenderPipelines.Universal.Shaders.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.InputSystem.ForUI">
+      <HintPath>Library\ScriptAssemblies\Unity.InputSystem.ForUI.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.RenderPipelines.Universal.2D.Editor.Overrides">
@@ -1426,6 +1434,10 @@
     </Reference>
     <Reference Include="Unity.Collections.Tests.CoreCLR.PublicJobPrivateGeneric">
       <HintPath>Library\ScriptAssemblies\Unity.Collections.Tests.CoreCLR.PublicJobPrivateGeneric.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.InputSystem">
+      <HintPath>Library\ScriptAssemblies\Unity.InputSystem.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEditor.UI">

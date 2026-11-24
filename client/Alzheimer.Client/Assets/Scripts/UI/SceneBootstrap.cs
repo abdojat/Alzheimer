@@ -13,6 +13,16 @@ namespace Alzheimer.Client.UI
         private static EventSystem _persistentEventSystem;
         private static bool _sceneLoadedSubscribed;
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStaticState()
+        {
+            if (_sceneLoadedSubscribed)
+                SceneManager.sceneLoaded -= HandleSceneLoaded;
+
+            _sceneLoadedSubscribed = false;
+            _persistentEventSystem = null;
+        }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Initialize()
         {
@@ -40,17 +50,32 @@ namespace Alzheimer.Client.UI
 
         private static void EnsureManagers()
         {
-            if (Object.FindAnyObjectByType<GameManager>() == null)
+            var gameManagers = Object.FindObjectsByType<GameManager>(FindObjectsInactive.Include);
+            if (gameManagers.Length == 0)
             {
                 var gameManager = new GameObject("GameManager");
                 gameManager.AddComponent<GameManager>();
                 gameManager.AddComponent<ReactionTimerController>();
             }
+            else
+            {
+                for (var i = 1; i < gameManagers.Length; i++)
+                    Object.Destroy(gameManagers[i].gameObject);
 
-            if (Object.FindAnyObjectByType<NetworkManager>() == null)
+                if (gameManagers[0].GetComponent<ReactionTimerController>() == null)
+                    gameManagers[0].gameObject.AddComponent<ReactionTimerController>();
+            }
+
+            var networkManagers = Object.FindObjectsByType<NetworkManager>(FindObjectsInactive.Include);
+            if (networkManagers.Length == 0)
             {
                 var networkManager = new GameObject("NetworkManager");
                 networkManager.AddComponent<NetworkManager>();
+            }
+            else
+            {
+                for (var i = 1; i < networkManagers.Length; i++)
+                    Object.Destroy(networkManagers[i].gameObject);
             }
         }
 
@@ -74,7 +99,7 @@ namespace Alzheimer.Client.UI
             foreach (var eventSystem in eventSystems)
             {
                 if (eventSystem != null && eventSystem != primary)
-                    Object.DestroyImmediate(eventSystem.gameObject);
+                    Object.Destroy(eventSystem.gameObject);
             }
 
             if (primary == null)
@@ -87,31 +112,64 @@ namespace Alzheimer.Client.UI
             Object.DontDestroyOnLoad(primary.gameObject);
 
             var inputModules = primary.GetComponents<BaseInputModule>();
-            foreach (var inputModule in inputModules)
-                Object.DestroyImmediate(inputModule);
+            InputSystemUIInputModule inputModule = null;
+            foreach (var module in inputModules)
+            {
+                if (module is InputSystemUIInputModule inputSystemModule)
+                {
+                    if (inputModule == null)
+                        inputModule = inputSystemModule;
+                    else
+                        Object.Destroy(inputSystemModule);
+                }
+                else
+                {
+                    Object.Destroy(module);
+                }
+            }
 
-            primary.gameObject.AddComponent<InputSystemUIInputModule>();
+            if (inputModule == null)
+                primary.gameObject.AddComponent<InputSystemUIInputModule>();
         }
 
         private static void BuildForScene(string sceneName)
         {
-            foreach (var existingUi in Object.FindObjectsByType<RuntimeSceneUi>(FindObjectsInactive.Include))
-                Object.DestroyImmediate(existingUi.gameObject);
-
             if (sceneName != "MainMenu" && sceneName != "GameTable")
                 return;
 
-            var canvasObject = new GameObject(sceneName + "UI");
-            canvasObject.AddComponent<RuntimeSceneUi>();
-            var canvas = canvasObject.AddComponent<Canvas>();
+            var existingUi = Object.FindObjectsByType<RuntimeSceneUi>(FindObjectsInactive.Include);
+            GameObject canvasObject;
+            if (existingUi.Length > 0)
+            {
+                canvasObject = existingUi[0].gameObject;
+                canvasObject.SetActive(false);
+                for (var i = canvasObject.transform.childCount - 1; i >= 0; i--)
+                    Object.Destroy(canvasObject.transform.GetChild(i).gameObject);
+            }
+            else
+            {
+                canvasObject = new GameObject(sceneName + "UI");
+                canvasObject.AddComponent<RuntimeSceneUi>();
+            }
+
+            for (var i = 1; i < existingUi.Length; i++)
+                Object.Destroy(existingUi[i].gameObject);
+
+            canvasObject.name = sceneName + "UI";
+            var canvas = canvasObject.GetComponent<Canvas>();
+            if (canvas == null)
+                canvas = canvasObject.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.pixelPerfect = false;
-            var scaler = canvasObject.AddComponent<CanvasScaler>();
+            var scaler = canvasObject.GetComponent<CanvasScaler>();
+            if (scaler == null)
+                scaler = canvasObject.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1080f, 1920f);
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
             scaler.matchWidthOrHeight = 0.5f;
-            canvasObject.AddComponent<GraphicRaycaster>();
+            if (canvasObject.GetComponent<GraphicRaycaster>() == null)
+                canvasObject.AddComponent<GraphicRaycaster>();
 
             var safeAreaObject = new GameObject("SafeArea");
             safeAreaObject.transform.SetParent(canvasObject.transform, false);
@@ -126,6 +184,8 @@ namespace Alzheimer.Client.UI
                 safeAreaObject.AddComponent<MainMenuScreen>().Initialize(safeAreaObject);
             else if (sceneName == "GameTable")
                 safeAreaObject.AddComponent<GameTableScreen>().Initialize(safeAreaObject);
+
+            canvasObject.SetActive(true);
         }
     }
 }
