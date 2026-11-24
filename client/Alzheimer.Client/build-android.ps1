@@ -25,7 +25,7 @@ if (-not $UnityExe) {
 }
 
 if (-not $UnityExe -or -not (Test-Path $UnityExe)) {
-    throw "Unity 6.3 Editor not found. Pass -UnityExe 'C:\...\Unity.exe'."
+    throw "Unity 6000.6.10f1 Editor not found. Pass -UnityExe 'C:\...\Unity.exe'."
 }
 
 New-Item -ItemType Directory -Path (Split-Path -Parent $output) -Force | Out-Null

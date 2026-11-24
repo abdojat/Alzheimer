@@ -1,7 +1,9 @@
 {
   "name": "Alzheimer.Client",
   "rootNamespace": "Alzheimer.Client",
-  "references": [],
+  "references": [
+    "Unity.InputSystem"
+  ],
   "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,

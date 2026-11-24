@@ -4,19 +4,42 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using UnityEngine.InputSystem.UI;
 
 namespace Alzheimer.Client.UI
 {
     public static class SceneBootstrap
     {
         private static EventSystem _persistentEventSystem;
+        private static bool _sceneLoadedSubscribed;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Initialize()
         {
+            if (!_sceneLoadedSubscribed)
+            {
+                SceneManager.sceneLoaded += HandleSceneLoaded;
+                _sceneLoadedSubscribed = true;
+            }
+
+            InitializeCurrentScene();
+        }
+
+        private static void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            InitializeCurrentScene();
+        }
+
+        private static void InitializeCurrentScene()
+        {
             EnsureCamera();
             EnsureEventSystem();
+            EnsureManagers();
+            BuildForScene(SceneManager.GetActiveScene().name);
+        }
 
+        private static void EnsureManagers()
+        {
             if (Object.FindAnyObjectByType<GameManager>() == null)
             {
                 var gameManager = new GameObject("GameManager");
@@ -29,8 +52,6 @@ namespace Alzheimer.Client.UI
                 var networkManager = new GameObject("NetworkManager");
                 networkManager.AddComponent<NetworkManager>();
             }
-
-            BuildForScene(SceneManager.GetActiveScene().name);
         }
 
         private static void EnsureCamera()
@@ -53,7 +74,7 @@ namespace Alzheimer.Client.UI
             foreach (var eventSystem in eventSystems)
             {
                 if (eventSystem != null && eventSystem != primary)
-                    Object.Destroy(eventSystem.gameObject);
+                    Object.DestroyImmediate(eventSystem.gameObject);
             }
 
             if (primary == null)
@@ -67,14 +88,21 @@ namespace Alzheimer.Client.UI
 
             var inputModules = primary.GetComponents<BaseInputModule>();
             foreach (var inputModule in inputModules)
-                Object.Destroy(inputModule);
+                Object.DestroyImmediate(inputModule);
 
-            primary.gameObject.AddComponent<StandaloneInputModule>();
+            primary.gameObject.AddComponent<InputSystemUIInputModule>();
         }
 
         private static void BuildForScene(string sceneName)
         {
+            foreach (var existingUi in Object.FindObjectsByType<RuntimeSceneUi>(FindObjectsInactive.Include))
+                Object.DestroyImmediate(existingUi.gameObject);
+
+            if (sceneName != "MainMenu" && sceneName != "GameTable")
+                return;
+
             var canvasObject = new GameObject(sceneName + "UI");
+            canvasObject.AddComponent<RuntimeSceneUi>();
             var canvas = canvasObject.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.pixelPerfect = false;

@@ -10,7 +10,7 @@ A **starter scaffold** for the customized Alzheimer multiplayer card game. Inclu
 
 ## Requirements
 
-- Unity Hub + Unity **6.3 LTS**, with Android Build Support, Android SDK & NDK Tools, and OpenJDK selected.
+- Unity Hub + Unity **6000.6.10f1** (Unity 6.6), with Android Build Support, Android SDK & NDK Tools, and OpenJDK selected.
 - .NET **10 SDK** and a C# editor (VS Code with C# Dev Kit, Visual Studio, or Rider).
 - Git.
 
@@ -49,7 +49,7 @@ Hub events: `RoomUpdated` and `RoomClosed`. The server uses in-memory state and 
 The generated Unity project is at `client/Alzheimer.Client`.
 
 1. Open Unity Hub and choose **Open** -> `D:\Users\abdal\Desktop\Alzheimer\client\Alzheimer.Client`.
-2. Use Unity **6000.3.0** or Unity 6.3 LTS. Let Package Manager restore packages.
+2. Use Unity **6000.6.10f1**. Let Package Manager restore packages.
 3. Open `Assets/Scenes/MainMenu.unity` and press **Play**.
 4. Use `PLAY` to open the local `Assets/Scenes/GameTable.unity` preview.
 5. The card table displays four face-down cards; tapping a card selects it and updates the status text.
@@ -59,7 +59,7 @@ The generated UI uses uGUI, a 1080×1920 Scale With Screen Size canvas, safe-are
 ## Android build
 
 1. In Unity Hub, open the project and install Android Build Support with SDK/NDK and JDK if prompted.
-2. Install Android 7.0/API 24 or newer SDK support.
+2. Install Android 8.0/API 26 or newer SDK support.
 3. Enable USB debugging on the phone and accept the computer authorization prompt.
 4. In Unity use **File -> Build Profiles**, select Android, switch platform, then build.
 5. Automated build from Windows PowerShell:
@@ -72,7 +72,7 @@ cd D:\Users\abdal\Desktop\Alzheimer\client\Alzheimer.Client
 If the Unity executable is not auto-detected:
 
 ```powershell
-.\build-android.ps1 -UnityExe "C:\Program Files\Unity\Hub\Editor\6000.3.0f1\Editor\Unity.exe"
+.\build-android.ps1 -UnityExe "C:\Program Files\Unity\Hub\Editor\6000.6.10f1\Editor\Unity.exe"
 ```
 
 The development IL2CPP/ARM64 APK is written to `D:\Users\abdal\Desktop\Alzheimer\builds\android\Alzheimer.apk`.
