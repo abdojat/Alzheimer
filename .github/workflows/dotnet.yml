@@ -1,0 +1,37 @@
+name: .NET CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore .NET projects
+        run: |
+          dotnet restore core/Alzheimer.Core/Alzheimer.Core.csproj
+          dotnet restore server/Alzheimer.Server/Alzheimer.Server.csproj
+          dotnet restore tests/Alzheimer.SmokeTests/Alzheimer.SmokeTests.csproj
+
+      - name: Build Alzheimer.Core
+        run: dotnet build core/Alzheimer.Core/Alzheimer.Core.csproj --configuration Release --no-restore
+
+      - name: Build Alzheimer.Server
+        run: dotnet build server/Alzheimer.Server/Alzheimer.Server.csproj --configuration Release --no-restore
+
+      - name: Run smoke and game engine tests
+        run: dotnet run --project tests/Alzheimer.SmokeTests/Alzheimer.SmokeTests.csproj --configuration Release --no-restore

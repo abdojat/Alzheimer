@@ -25,8 +25,44 @@ public sealed record PeekInitialCards(int FirstHandIndex, int SecondHandIndex) :
 public sealed record DrawCard : GameAction;
 public sealed record DiscardDrawnCard : GameAction;
 public sealed record ReplaceHandCard(int HandIndex) : GameAction;
+public sealed record ActivateDrawnAbility : GameAction;
+public sealed record ResolveJackAbility(int HandIndex) : GameAction;
+public sealed record ResolveQueenAbility(int HandIndex) : GameAction;
+public sealed record ResolveKingAbility(string TargetPlayerId, int OwnHandIndex, int TargetHandIndex) : GameAction;
 public sealed record CallAlzheimer : GameAction;
 public sealed record EndTurn : GameAction;
+
+public enum DrawResolutionOption
+{
+    Discard,
+    Replace,
+    ActivateAbility
+}
+
+public static class DrawResolutionRules
+{
+    public static IReadOnlyList<DrawResolutionOption> GetAvailableOptions(
+        CardRank drawnRank,
+        int ownHandCount,
+        int opponentsWithCards)
+    {
+        if (ownHandCount < 0)
+            throw new ArgumentOutOfRangeException(nameof(ownHandCount));
+        if (opponentsWithCards < 0)
+            throw new ArgumentOutOfRangeException(nameof(opponentsWithCards));
+
+        var options = new List<DrawResolutionOption> { DrawResolutionOption.Discard };
+        if (ownHandCount > 0)
+        {
+            options.Add(DrawResolutionOption.Replace);
+            if (drawnRank is CardRank.Jack or CardRank.Queen
+                || drawnRank == CardRank.King && opponentsWithCards > 0)
+                options.Add(DrawResolutionOption.ActivateAbility);
+        }
+
+        return Array.AsReadOnly(options.ToArray());
+    }
+}
 
 public enum GameErrorCode
 {
@@ -38,6 +74,12 @@ public enum GameErrorCode
     InvalidHandIndex,
     DrawPileEmpty,
     CallerAlreadyRecorded,
+    InvalidAbilityCard,
+    AbilityUnavailable,
+    InvalidAbilityType,
+    InvalidAbilityTarget,
+    AbilityDeadlineNotReached,
+    AbilityWindowExpired,
     InvalidAction
 }
 
@@ -48,6 +90,9 @@ public enum GameEventType
     CardDrawn,
     DrawnCardDiscarded,
     HandCardReplaced,
+    AbilityWindowOpened,
+    AbilityResolved,
+    AbilityExpired,
     AlzheimerCalled,
     TurnEnded,
     ReactionWindowCompleted,
@@ -80,12 +125,20 @@ public sealed record PublicGameView(
     int DeckCount,
     int DrawPileCount,
     IReadOnlyList<PublicPlayerView> Players,
-    IReadOnlyList<CardView> DiscardPile);
+    IReadOnlyList<CardView> DiscardPile,
+    QueenReactionTargetsView? QueenReactionTargets);
 
 public sealed record PlayerGameView(
     PublicGameView Public,
     IReadOnlyList<CardSlotView> OwnHand,
-    CardView? PendingDrawnCard);
+    CardView? PendingDrawnCard,
+    IReadOnlyList<DrawResolutionOption> AvailableDrawResolutions,
+    DateTimeOffset? AbilityDeadlineUtc);
+
+public sealed record QueenReactionTargetsView(
+    CardRank QueenRank,
+    CardRank SelectedCardRank,
+    CardView FinalTopCard);
 
 public interface IGameClock
 {

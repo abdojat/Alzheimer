@@ -76,21 +76,47 @@ public sealed class AlzheimerRoundEngine
     public TransitionResult ProcessAction(string? playerId, GameAction? action)
     {
         var occurredAtUtc = _clock.UtcNow.ToUniversalTime();
-        if (string.IsNullOrWhiteSpace(playerId) || !_playersById.ContainsKey(playerId))
-            return Rejected(GameErrorCode.InvalidPlayer, occurredAtUtc);
-        if (action is null)
-            return Rejected(GameErrorCode.InvalidAction, occurredAtUtc);
+        var timeoutEvents = ProcessAbilityExpiration(occurredAtUtc);
 
-        return action switch
+        if (string.IsNullOrWhiteSpace(playerId) || !_playersById.ContainsKey(playerId))
+            return Rejected(GameErrorCode.InvalidPlayer, occurredAtUtc, timeoutEvents);
+        if (action is null)
+            return Rejected(GameErrorCode.InvalidAction, occurredAtUtc, timeoutEvents);
+        if (timeoutEvents.Count != 0 && action is (ResolveJackAbility or ResolveQueenAbility or ResolveKingAbility))
+            return Rejected(GameErrorCode.AbilityWindowExpired, occurredAtUtc, timeoutEvents);
+
+        var result = action switch
         {
             PeekInitialCards peek => Peek(playerId, peek, occurredAtUtc),
             DrawCard => Draw(playerId, occurredAtUtc),
             DiscardDrawnCard => DiscardDrawn(playerId, occurredAtUtc),
             ReplaceHandCard replace => Replace(playerId, replace.HandIndex, occurredAtUtc),
+            ActivateDrawnAbility => ActivateAbility(playerId, occurredAtUtc),
+            ResolveJackAbility jack => ResolveJack(playerId, jack.HandIndex, occurredAtUtc),
+            ResolveQueenAbility queen => ResolveQueen(playerId, queen.HandIndex, occurredAtUtc),
+            ResolveKingAbility king => ResolveKing(
+                playerId,
+                king.TargetPlayerId,
+                king.OwnHandIndex,
+                king.TargetHandIndex,
+                occurredAtUtc),
             CallAlzheimer => Call(playerId, occurredAtUtc),
             EndTurn => End(playerId, occurredAtUtc),
             _ => Rejected(GameErrorCode.InvalidAction, occurredAtUtc)
         };
+
+        return timeoutEvents.Count == 0
+            ? result
+            : IncludeEvents(result, timeoutEvents);
+    }
+
+    public TransitionResult ProcessTimeouts()
+    {
+        var occurredAtUtc = _clock.UtcNow.ToUniversalTime();
+        var events = ProcessAbilityExpiration(occurredAtUtc);
+        return events.Count == 0
+            ? Rejected(GameErrorCode.AbilityDeadlineNotReached, occurredAtUtc)
+            : Accepted(occurredAtUtc, events);
     }
 
     public TransitionResult CompleteReactionWindow()
@@ -104,6 +130,12 @@ public sealed class AlzheimerRoundEngine
         {
             new(GameEventType.ReactionWindowCompleted, round.Players[round.Turn.ActiveSeatIndex].PlayerId)
         };
+
+        if (round.QueenReactionTargets is { } queenTargets)
+        {
+            round.DiscardPile.MakeTop(queenTargets.SelectedCard);
+            round.QueenReactionTargets = null;
+        }
 
         if (round.DrawPile.Count == 0)
         {
@@ -139,7 +171,13 @@ public sealed class AlzheimerRoundEngine
             round.DeckCount,
             round.DrawPile.Count,
             Array.AsReadOnly(players),
-            Array.AsReadOnly(discardCards));
+            Array.AsReadOnly(discardCards),
+            round.QueenReactionTargets is { } targets
+                ? new QueenReactionTargetsView(
+                    targets.Queen.Rank,
+                    targets.SelectedCard.Rank,
+                    ToCardView(targets.SelectedCard))
+                : null);
     }
 
     public PlayerGameView GetPlayerView(string playerId)
@@ -158,11 +196,17 @@ public sealed class AlzheimerRoundEngine
             StringComparison.Ordinal)
             ? round.Turn.PendingDrawnCard
             : null;
+        var isActivePlayer = string.Equals(
+            round.Players[round.Turn.ActiveSeatIndex].PlayerId,
+            playerId,
+            StringComparison.Ordinal);
 
         return new PlayerGameView(
             GetPublicView(),
             Array.AsReadOnly(ownHand),
-            pendingDrawnCard is null ? null : ToCardView(pendingDrawnCard));
+            pendingDrawnCard is null ? null : ToCardView(pendingDrawnCard),
+            GetAvailableDrawResolutions(playerId, isActivePlayer),
+            isActivePlayer ? round.Turn.AbilityDeadlineUtc : null);
     }
 
     private TransitionResult Peek(string playerId, PeekInitialCards action, DateTimeOffset occurredAtUtc)
@@ -252,6 +296,185 @@ public sealed class AlzheimerRoundEngine
         return Accepted(occurredAtUtc, new[] { new GameEvent(GameEventType.HandCardReplaced, playerId, handIndex) });
     }
 
+    private TransitionResult ActivateAbility(string playerId, DateTimeOffset occurredAtUtc)
+    {
+        var round = _state.Round;
+        if (round.Phase != GamePhase.AwaitingDrawResolution)
+            return Rejected(GameErrorCode.InvalidPhase, occurredAtUtc);
+        if (!IsActivePlayer(playerId))
+            return Rejected(GameErrorCode.NotActivePlayer, occurredAtUtc);
+
+        var ability = GetAbility(round.Turn.PendingDrawnCard?.Rank);
+        if (ability is null)
+            return Rejected(GameErrorCode.InvalidAbilityCard, occurredAtUtc);
+        if (!GetResolutionOptions(playerId, round.Turn.PendingDrawnCard!.Rank)
+            .Contains(DrawResolutionOption.ActivateAbility))
+            return Rejected(GameErrorCode.AbilityUnavailable, occurredAtUtc);
+
+        round.Turn.PendingAbility = ability;
+        round.Turn.AbilityDeadlineUtc = occurredAtUtc.AddSeconds(30);
+        round.Phase = GamePhase.AwaitingAbilityResolution;
+        ValidateInvariants();
+        return Accepted(occurredAtUtc, new[] { new GameEvent(GameEventType.AbilityWindowOpened, playerId) });
+    }
+
+    private TransitionResult ResolveJack(string playerId, int handIndex, DateTimeOffset occurredAtUtc)
+    {
+        var round = _state.Round;
+        var validationError = ValidateAbilityResolution(playerId, SpecialAbility.Jack, occurredAtUtc);
+        if (validationError is not null)
+            return validationError;
+
+        var hand = _playersById[playerId].Hand;
+        if (handIndex < 0 || handIndex >= hand.Count)
+            return Rejected(GameErrorCode.InvalidHandIndex, occurredAtUtc);
+
+        hand[handIndex].Knowledge = CardKnowledge.KnownToOwner;
+        DiscardAbilityCard(round);
+        round.Phase = GamePhase.AwaitingPostResolutionDecision;
+        ValidateInvariants();
+        return Accepted(occurredAtUtc, new[] { new GameEvent(GameEventType.AbilityResolved, playerId) });
+    }
+
+    private TransitionResult ResolveQueen(string playerId, int handIndex, DateTimeOffset occurredAtUtc)
+    {
+        var round = _state.Round;
+        var validationError = ValidateAbilityResolution(playerId, SpecialAbility.Queen, occurredAtUtc);
+        if (validationError is not null)
+            return validationError;
+
+        var hand = _playersById[playerId].Hand;
+        if (handIndex < 0 || handIndex >= hand.Count)
+            return Rejected(GameErrorCode.InvalidHandIndex, occurredAtUtc);
+
+        var selectedCard = hand[handIndex].Card;
+        hand.RemoveAt(handIndex);
+        var queen = DiscardAbilityCard(round);
+        round.DiscardPile.Add(selectedCard);
+
+        var events = new List<GameEvent>
+        {
+            new(GameEventType.AbilityResolved, playerId)
+        };
+        if (hand.Count == 0)
+        {
+            var isFirstCaller = round.CallerId is null;
+            round.CallerId ??= playerId;
+            round.QueenReactionTargets = null;
+            round.Phase = GamePhase.FinalPhase;
+            if (isFirstCaller)
+                events.Add(new GameEvent(GameEventType.AlzheimerCalled, playerId));
+        }
+        else
+        {
+            round.QueenReactionTargets = new QueenReactionTargets(queen, selectedCard);
+            round.Phase = GamePhase.AwaitingPostResolutionDecision;
+        }
+
+        ValidateInvariants();
+        return Accepted(occurredAtUtc, events);
+    }
+
+    private TransitionResult ResolveKing(
+        string playerId,
+        string targetPlayerId,
+        int ownHandIndex,
+        int targetHandIndex,
+        DateTimeOffset occurredAtUtc)
+    {
+        var round = _state.Round;
+        var validationError = ValidateAbilityResolution(playerId, SpecialAbility.King, occurredAtUtc);
+        if (validationError is not null)
+            return validationError;
+        if (string.IsNullOrWhiteSpace(targetPlayerId)
+            || string.Equals(playerId, targetPlayerId, StringComparison.Ordinal)
+            || !_playersById.TryGetValue(targetPlayerId, out var targetPlayer))
+            return Rejected(GameErrorCode.InvalidAbilityTarget, occurredAtUtc);
+
+        var ownHand = _playersById[playerId].Hand;
+        var targetHand = targetPlayer.Hand;
+        if (ownHandIndex < 0 || ownHandIndex >= ownHand.Count
+            || targetHandIndex < 0 || targetHandIndex >= targetHand.Count)
+            return Rejected(GameErrorCode.InvalidHandIndex, occurredAtUtc);
+
+        (ownHand[ownHandIndex].Card, targetHand[targetHandIndex].Card) =
+            (targetHand[targetHandIndex].Card, ownHand[ownHandIndex].Card);
+        ownHand[ownHandIndex].Knowledge = CardKnowledge.Unknown;
+        targetHand[targetHandIndex].Knowledge = CardKnowledge.Unknown;
+        DiscardAbilityCard(round);
+        round.Phase = GamePhase.AwaitingPostResolutionDecision;
+        ValidateInvariants();
+        return Accepted(occurredAtUtc, new[] { new GameEvent(GameEventType.AbilityResolved, playerId) });
+    }
+
+    private TransitionResult? ValidateAbilityResolution(
+        string playerId,
+        SpecialAbility expectedAbility,
+        DateTimeOffset occurredAtUtc)
+    {
+        var round = _state.Round;
+        if (round.Phase != GamePhase.AwaitingAbilityResolution)
+            return Rejected(GameErrorCode.InvalidPhase, occurredAtUtc);
+        if (!IsActivePlayer(playerId))
+            return Rejected(GameErrorCode.NotActivePlayer, occurredAtUtc);
+        if (round.Turn.PendingAbility != expectedAbility)
+            return Rejected(GameErrorCode.InvalidAbilityType, occurredAtUtc);
+        return null;
+    }
+
+    private IReadOnlyList<DrawResolutionOption> GetAvailableDrawResolutions(string playerId, bool isActivePlayer)
+    {
+        var round = _state.Round;
+        if (!isActivePlayer
+            || round.Phase != GamePhase.AwaitingDrawResolution
+            || round.Turn.PendingDrawnCard is null)
+            return Array.Empty<DrawResolutionOption>();
+
+        return GetResolutionOptions(playerId, round.Turn.PendingDrawnCard.Rank);
+    }
+
+    private IReadOnlyList<DrawResolutionOption> GetResolutionOptions(string playerId, CardRank drawnRank)
+    {
+        var ownHandCount = _playersById[playerId].Hand.Count;
+        var opponentsWithCards = _state.Round.Players
+            .Where(player => !string.Equals(player.PlayerId, playerId, StringComparison.Ordinal))
+            .Sum(player => player.Hand.Count);
+        return DrawResolutionRules.GetAvailableOptions(drawnRank, ownHandCount, opponentsWithCards);
+    }
+
+    private static SpecialAbility? GetAbility(CardRank? rank) => rank switch
+    {
+        CardRank.Jack => SpecialAbility.Jack,
+        CardRank.Queen => SpecialAbility.Queen,
+        CardRank.King => SpecialAbility.King,
+        _ => null
+    };
+
+    private static PlayingCard DiscardAbilityCard(RoundState round)
+    {
+        var card = round.Turn.PendingDrawnCard
+            ?? throw new InvalidOperationException("An ability must have a pending drawn card.");
+        round.DiscardPile.Add(card);
+        round.Turn.PendingDrawnCard = null;
+        round.Turn.PendingAbility = null;
+        round.Turn.AbilityDeadlineUtc = null;
+        return card;
+    }
+
+    private List<GameEvent> ProcessAbilityExpiration(DateTimeOffset occurredAtUtc)
+    {
+        var round = _state.Round;
+        if (round.Phase != GamePhase.AwaitingAbilityResolution
+            || round.Turn.AbilityDeadlineUtc is not { } deadline
+            || occurredAtUtc < deadline)
+            return new List<GameEvent>();
+
+        DiscardAbilityCard(round);
+        round.Phase = GamePhase.AwaitingPostResolutionDecision;
+        ValidateInvariants();
+        return new List<GameEvent> { new(GameEventType.AbilityExpired, round.Players[round.Turn.ActiveSeatIndex].PlayerId) };
+    }
+
     private TransitionResult Call(string playerId, DateTimeOffset occurredAtUtc)
     {
         var round = _state.Round;
@@ -263,6 +486,7 @@ public sealed class AlzheimerRoundEngine
             return Rejected(GameErrorCode.NotActivePlayer, occurredAtUtc);
 
         round.CallerId = playerId;
+        round.QueenReactionTargets = null;
         round.Phase = GamePhase.FinalPhase;
         ValidateInvariants();
         return Accepted(occurredAtUtc, new[] { new GameEvent(GameEventType.AlzheimerCalled, playerId) });
@@ -307,6 +531,13 @@ public sealed class AlzheimerRoundEngine
             || round.Players[round.Turn.ActiveSeatIndex].PlayerId != round.HostPlayerId
                 && round.Phase == GamePhase.WaitingForInitialPeeks)
             throw new InvalidOperationException("The round state violated player or host-turn invariants.");
+        var abilityPhase = round.Phase == GamePhase.AwaitingAbilityResolution;
+        if (abilityPhase != (round.Turn.PendingAbility is not null
+                && round.Turn.PendingDrawnCard is not null
+                && round.Turn.AbilityDeadlineUtc is not null)
+            || (!abilityPhase
+                && (round.Turn.PendingAbility is not null || round.Turn.AbilityDeadlineUtc is not null)))
+            throw new InvalidOperationException("The round state violated ability-window invariants.");
     }
 
     private static CardView ToCardView(PlayingCard card) =>
@@ -315,6 +546,16 @@ public sealed class AlzheimerRoundEngine
     private static TransitionResult Accepted(DateTimeOffset occurredAtUtc, IEnumerable<GameEvent> events) =>
         new(true, null, occurredAtUtc, Array.AsReadOnly(events.ToArray()));
 
-    private static TransitionResult Rejected(GameErrorCode errorCode, DateTimeOffset occurredAtUtc) =>
-        new(false, errorCode, occurredAtUtc, Array.Empty<GameEvent>());
+    private static TransitionResult IncludeEvents(TransitionResult result, IEnumerable<GameEvent> precedingEvents) =>
+        new(
+            result.Accepted,
+            result.ErrorCode,
+            result.OccurredAtUtc,
+            Array.AsReadOnly(precedingEvents.Concat(result.Events).ToArray()));
+
+    private static TransitionResult Rejected(
+        GameErrorCode errorCode,
+        DateTimeOffset occurredAtUtc,
+        IEnumerable<GameEvent>? events = null) =>
+        new(false, errorCode, occurredAtUtc, Array.AsReadOnly(events?.ToArray() ?? Array.Empty<GameEvent>()));
 }

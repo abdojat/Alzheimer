@@ -33,5 +33,6 @@ Check(RoundScorer.IsMatchOver(new[] { 44, 100, 81 }), "score reaching 100 ends m
 Check(!RoundScorer.IsMatchOver(new[] { 44, 99, 81 }), "below 100 does not end match");
 
 RoundEngineTests.Run(Check);
+SpecialAbilityTests.Run(Check);
 
 Console.WriteLine("All smoke tests passed.");

@@ -1,6 +1,6 @@
 # Alzheimer — implementation roadmap and verified status
 
-**Status updated:** 2026-11-25 on `feat/p1-core-engine`. P0 device smoke-test status is owner-reported; P1 checks below reflect commands run for this change.
+**Status updated:** 2026-11-25 on `feat/p2a-special-abilities`. P0 device smoke-test status is owner-reported; P1/P2A checks below reflect commands run for this change.
 
 ## Already present (by code inspection)
 
@@ -9,8 +9,10 @@
 - [x] ASP.NET Core 10 SignalR room create/join/leave and in-memory lobby state.
 - [x] Unity 6 Android project with MainMenu/GameTable scene files, runtime-generated uGUI preview, Android build scripts, URP 2D assets.
 - [x] P1 deterministic pure-C# round engine for initial peeks, ordinary draw resolution, post-resolution decision and privacy-safe projections (see P2 for remaining gameplay).
+- [x] P2A Jack, Queen, and King abilities with injected-clock 30-second ability deadlines, private-safe projections, Queen reaction metadata, and deterministic timeout handling.
+- [x] Lightweight .NET 10 GitHub Actions workflow for core/server builds and smoke/game-engine tests; Unity/Android builds are excluded.
 - [ ] Connected Unity online lobby/client (not implemented).
-- [ ] Authoritative multiplayer gameplay (not implemented).
+- [ ] Authoritative multiplayer gameplay (the server remains lobby-only).
 - [x] Owner-confirmed Android build installed and launched on a physical phone (reported 2026-11-25; not independently reproduced in this work session).
 
 ## P0 — stabilize the Unity prototype
@@ -39,19 +41,33 @@
 - Each authoritative room will create one `AlzheimerRoundEngine` and submit trusted player IDs with `ProcessAction`. Client-supplied ranks, scores, identities, or timestamps are not accepted as commands.
 - Project `GetPublicView()` to all room members and `GetPlayerView(playerId)` only to that player. Never serialize or broadcast internal state.
 - The engine runs synchronous transitions but does not synchronize concurrent access. The server must serialize each room's commands through a per-room lock, actor, or queue before accepting multiplayer actions.
-- `CompleteReactionWindow()` is a trusted engine-authoritative P1 simulation hook only. P2 must replace its use in a production room with server-owned deadline and reaction processing; clients cannot decide that a phase has expired.
-- `IGameClock` supplies transition timestamps. P2 will use an injectable/server clock for authoritative deadlines; P1 does not start timers.
+- `CompleteReactionWindow()` remains a trusted simulation/progression hook; P2A does not implement reactions or a reaction timer. P2B must use server-owned reaction deadlines and processing in a production room; clients cannot decide that a phase has expired.
+- `IGameClock` supplies transition timestamps and P2A ability deadlines. `ProcessTimeouts()` expires due abilities; P2B must add authoritative reaction deadlines.
 - P3 will connect room creation/lifecycle to match lifecycle. P1 does not change `LobbyHub` or create a live network game.
 
-## P2 — abilities, reactions, and round completion
+## P2A — special-card abilities and .NET CI
 
-1. Jack/Queen/King ability resolution and 30s timeouts.
-2. 30s simultaneous reaction windows, irreversible Done, rank-only matches, special Queen dual-target behavior.
-3. Invalid reaction penalties, empty-pile +10, end-on-depletion and last-card reaction window.
-4. Manual and automatic Alzheimer calls, full final-turn accounting, scores, deck reset, match ends at >=100.
-5. Add integration/simulation tests covering race conditions, ties, edge cases and view redaction.
+1. [x] Activate J/Q/K only for a special card drawn during the active player's normal turn; preserve keep/discard alternatives.
+2. [x] Resolve Jack peeks privately, Queen discards with retained two-rank reaction metadata and final-top restoration, and blind King swaps with received-card knowledge invalidation.
+3. [x] Enforce exact 30-second ability deadlines using the injected UTC game clock, including deterministic expiry before accepting a late resolution.
+4. [x] Add deterministic ability/privacy/conservation tests and a .NET-only GitHub Actions workflow.
 
-**P2 acceptance:** full rulebook simulation runs headlessly on the server with deterministic tests and consistent private state views.
+**P2A acceptance:** implemented in the pure C# engine. The API remains disconnected from live SignalR gameplay. The no-target choice policy is tested directly; a no-target state cannot currently be reached through P1/P2A normal-turn transitions because empty-hand calls end the current engine pipeline and reaction throws/final turns are not implemented.
+
+## P2B — reaction gameplay (not complete)
+
+1. [ ] Implement simultaneous rank-only reaction throws and persistent Queen dual-rank matching; integrate the existing Queen final-top restoration with reaction throws.
+2. [ ] Add Done states and a server-authoritative 30-second reaction deadline.
+3. [ ] Implement invalid-throw penalties, empty-pile +10 penalties, reaction depletion, and automatic calls from reaction throws.
+4. [ ] Test simultaneous submissions, action ordering, privacy, and all reaction edge cases.
+
+## P2C — final-turn accounting and scoring (not complete)
+
+1. [ ] Implement voluntary/automatic caller final-turn accounting, including empty-hand calls outside the active player's turn.
+2. [ ] Implement draw-pile depletion timing, end-of-round scoring/doubling, cumulative scores, match completion at 100, and round reset.
+3. [ ] Add deterministic scoring, tie, depletion, and multi-round match tests.
+
+**P2B/P2C acceptance:** neither phase is complete. Full rulebook simulation, scoring, and match completion remain outstanding.
 
 ## P3 — connected lobby + game UI
 
@@ -64,7 +80,7 @@
 
 ## P4 — release readiness
 
-- Authentication / guest identity; reconnect and timeout policy; persistence; abusive-client protections; sound, animation, accessibility, localization; Android release signing and store requirements; CI for .NET tests and Unity build validation.
+- Authentication / guest identity; reconnect and timeout policy; persistence; abusive-client protections; sound, animation, accessibility, localization; Android release signing and store requirements; Unity build validation.
 - Do not treat this as implemented until verified.
 
 ## Known technical findings
@@ -74,15 +90,16 @@
 - `NetworkManager.Connect` explicitly reports no real network transport; `LobbyHub` is lobby-only.
 - `MainMenu` Create/Join/Settings are placeholder status actions.
 - `GameTableScreen` draws four placeholders and starts/stops its timer immediately; it has no actual gameplay mechanics.
-- No dedicated agent instructions or GitHub CI were present at audit baseline.
+- `.github/workflows/dotnet.yml` runs .NET restore, core/server builds, and the smoke/game-engine test executable on pushes and pull requests targeting `main`; it intentionally has no Unity or Android build.
 
 ## Update policy
 
 When completing a milestone, link its commit/PR, add the validation command/results and keep unchecked items unchecked until verified. Rules remain authoritative in `docs/Alzheimer_Card_Game_Rules_v1.1.md` unless the owner explicitly approves a new version.
 
-### P1 validation run (2026-11-25)
+### P2A validation run (2026-11-25)
 
-- `dotnet run --project tests/Alzheimer.SmokeTests` — passed; 666 assertions, including the original utility checks and deterministic P1 scenarios.
-- `dotnet build core/Alzheimer.Core` — passed.
-- `dotnet build server/Alzheimer.Server` — passed.
+- `dotnet run --project tests/Alzheimer.SmokeTests` — passed; 842 assertions, no warnings.
+- `dotnet build core/Alzheimer.Core` — passed; 0 warnings, 0 errors.
+- `dotnet build server/Alzheimer.Server` — passed; 0 warnings, 0 errors.
+- CI workflow was added but cannot be reported as a successful GitHub Actions run until pushed and executed by GitHub.
 - Unity Editor tests and Android build were not run for this core-only change. The Android install/launch result above is owner-reported, not independently re-tested here.

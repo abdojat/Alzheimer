@@ -16,6 +16,7 @@ internal sealed class RoundState
     public required TurnState Turn { get; init; }
     public GamePhase Phase { get; set; }
     public string? CallerId { get; set; }
+    public QueenReactionTargets? QueenReactionTargets { get; set; }
 }
 
 internal sealed class PlayerState(string playerId, string displayName)
@@ -59,10 +60,30 @@ internal sealed class DiscardPile
     public IEnumerable<PlayingCard> Cards => _cards;
 
     public void Add(PlayingCard card) => _cards.Add(card);
+
+    public void MakeTop(PlayingCard card)
+    {
+        var index = _cards.FindLastIndex(candidate => candidate.PhysicalCardId == card.PhysicalCardId);
+        if (index < 0)
+            throw new InvalidOperationException("The selected Queen card is not in the discard pile.");
+        _cards.RemoveAt(index);
+        _cards.Add(card);
+    }
 }
 
 internal sealed class TurnState(int activeSeatIndex)
 {
     public int ActiveSeatIndex { get; set; } = activeSeatIndex;
     public PlayingCard? PendingDrawnCard { get; set; }
+    public SpecialAbility? PendingAbility { get; set; }
+    public DateTimeOffset? AbilityDeadlineUtc { get; set; }
 }
+
+internal enum SpecialAbility
+{
+    Jack,
+    Queen,
+    King
+}
+
+internal sealed record QueenReactionTargets(PlayingCard Queen, PlayingCard SelectedCard);
