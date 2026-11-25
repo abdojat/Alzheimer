@@ -1,8 +1,11 @@
 using Alzheimer.Core;
 
-static void Check(bool value, string description)
+var checks = 0;
+
+void Check(bool value, string description)
 {
     if (!value) throw new Exception("FAILED: " + description);
+    checks++;
     Console.WriteLine("PASS: " + description);
 }
 
@@ -31,9 +34,17 @@ var depletion = RoundScorer.Calculate(new[] { new PlayerRoundBase("A", 3, 10), n
 Check(depletion["A"] == 26 && depletion["B"] == 16, "undrawn penalty before doubling");
 Check(RoundScorer.IsMatchOver(new[] { 44, 100, 81 }), "score reaching 100 ends match");
 Check(!RoundScorer.IsMatchOver(new[] { 44, 99, 81 }), "below 100 does not end match");
+Check(RoundScorer.GetMatchWinners(new Dictionary<string, int>
+    {
+        ["A"] = 105,
+        ["B"] = 72,
+        ["C"] = 72,
+        ["D"] = 90
+    }).SequenceEqual(new[] { "B", "C" }), "tied lowest cumulative scores share the match win");
 
 RoundEngineTests.Run(Check);
 SpecialAbilityTests.Run(Check);
 ReactionTests.Run(Check);
+FinalScoringTests.Run(Check);
 
-Console.WriteLine("All smoke tests passed.");
+Console.WriteLine($"All {checks} smoke assertions passed.");

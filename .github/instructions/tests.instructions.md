@@ -17,6 +17,8 @@ Required rule scenario matrix as engine functionality is added:
 - Invalid reaction: attempted card returns and becomes known, immediate unknown penalty card; +10 if no draw; depletion mid-window does not cancel remaining reactions.
 - Final normal draw/penalty draw exhaustion; eligible last-card Alzheimer call; final reaction window; caller vs no-caller score doubling.
 - Penalties before doubling, caller unique lowest vs tied lowest vs loser, accumulating totals across rounds, stop at >=100, tied lowest match winners, deck reset.
+- Voluntary final-turn sequencing for 2–10 seats, reaction-time automatic calls with the active player rescheduled after the event, final-turn J/Q/K abilities/timeouts, and no reaction windows/calls during final turns.
+- Full deterministic match simulation through round exhaustion, scoring, fresh-deck/private-knowledge reset, and match completion; assert duplicate/stale progression cannot double-apply scores.
 - Unauthorized attempts (another player's hand, stale phase, duplicate actions), private-state redaction, and exact timing at phase deadlines.
 
 For each completed milestone report tests **added**, **run**, **passed/failed**, and scenarios still untested.

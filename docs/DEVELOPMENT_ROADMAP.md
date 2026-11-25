@@ -1,16 +1,17 @@
 # Alzheimer — implementation roadmap and verified status
 
-**Status updated:** 2026-11-25 on the P2B reaction-system worktree. P0 device smoke-test status is owner-reported; P1/P2A/P2B checks below reflect commands run for their respective changes.
+**Status updated:** 2026-11-25 on the P2C final-turn/scoring worktree. P0 device smoke-test status is owner-reported; P1/P2A/P2B validation reflects commands run for those milestones, and P2C results are recorded below.
 
 ## Already present (by code inspection)
 
 - [x] Pure C# primitives: cards, 1–4 shuffled decks, player-count settings, rank/Queen-window matching, scoring rules.
-- [x] Executable console smoke test program with 18 original utility checks (re-run with P1 scenarios on 2026-11-25).
+- [x] No-NuGet executable smoke suite covering core rules, P1–P2C regressions, round reset, privacy, and deterministic match simulation (1,869 assertions in the P2C validation run).
 - [x] ASP.NET Core 10 SignalR room create/join/leave and in-memory lobby state.
 - [x] Unity 6 Android project with MainMenu/GameTable scene files, runtime-generated uGUI preview, Android build scripts, URP 2D assets.
-- [x] P1 deterministic pure-C# round engine for initial peeks, ordinary draw resolution, post-resolution decision and privacy-safe projections (see P2 for remaining gameplay).
+- [x] P1 deterministic pure-C# round foundation for initial peeks, ordinary draw resolution, post-resolution decision and privacy-safe projections.
 - [x] P2A Jack, Queen, and King abilities with injected-clock 30-second ability deadlines, private-safe projections, Queen reaction metadata, and deterministic timeout handling.
 - [x] P2B rank-only multiplayer reactions with persistent Queen matching, per-player Done, authoritative 30-second deadlines, invalid-throw penalties, privacy-safe projections, and automatic reaction calls.
+- [x] P2C executable final turns, exhaustion-aware round scoring, cumulative match completion, fresh round resets, structured score/reveal projections, and deterministic full-match simulation.
 - [x] Lightweight .NET 10 GitHub Actions workflow for core/server builds and smoke/game-engine tests; Unity/Android builds are excluded.
 - [ ] Connected Unity online lobby/client (not implemented).
 - [ ] Authoritative multiplayer gameplay (the server remains lobby-only).
@@ -54,32 +55,36 @@
 3. [x] Enforce exact 30-second ability deadlines using the injected UTC game clock, including deterministic expiry before accepting a late resolution.
 4. [x] Add deterministic ability/privacy/conservation tests and a .NET-only GitHub Actions workflow.
 
-**P2A acceptance:** implemented in the pure C# engine. The API remains disconnected from live SignalR gameplay. The no-target choice policy is tested directly; a no-target state cannot currently be reached through P1/P2A normal-turn transitions because empty-hand calls end the current engine pipeline and reaction throws/final turns are not implemented.
+**P2A acceptance:** implemented in the pure C# engine. The API remains disconnected from live SignalR gameplay. The no-target choice policy is tested directly; P2C now executes final turns through the ordinary draw/resolution/ability flow.
 
 ## P2B — reaction gameplay (complete)
 
 1. [x] Implement repeated multiplayer reaction throws, rank-only matching against the current top, and persistent Queen dual-rank matching; restore the Queen-selected card as final top.
 2. [x] Add irreversible per-player Done, unique command IDs, stale-window rejection, and injected-clock 30-second deadlines with exact boundary handling.
 3. [x] Apply private knowledge reveals and immediate unknown-card penalties for invalid throws; record +10 when the draw pile is empty and keep penalty depletion inside the ongoing window.
-4. [x] Automatically register a first empty-hand reaction caller, stop reactions immediately, preserve active-seat context, and record subsequent-turn player order without implementing P2C turn execution.
+4. [x] Automatically register a first empty-hand reaction caller, stop reactions immediately, preserve active-seat context, and record subsequent-turn player order for P2C execution.
 5. [x] Cover matching/nonmatching/suit-only attempts, multiple throws, unknown-card guesses, Queen exception/final top, Done/deadlines, penalties/depletion, privacy, command replays, automatic calls, and card conservation with deterministic smoke scenarios.
 
-**P2B acceptance:** complete in the pure C# engine. Actions are synchronous and must be serialized per room by future server integration; no SignalR gameplay, persistence, or Unity work is included. `RequiredFinalTurnPlayerIds` and each player's `RoundPenaltyPoints` are retained for P2C.
+**P2B acceptance:** complete in the pure C# engine. Actions are synchronous and must be serialized per room by future server integration; no SignalR gameplay, persistence, or Unity work is included. P2C consumes `RequiredFinalTurnPlayerIds`; `RoundPenaltyPoints` feed round scoring.
 
-## P2C — final-turn accounting and scoring (not complete)
+## P2C — final turns, round scoring, and match progression (complete)
 
-1. [ ] Execute voluntary/automatic caller final-turn turns from the recorded order, including empty-hand calls outside the active player's turn.
-2. [ ] Implement draw-pile depletion timing, end-of-round scoring/doubling, cumulative scores, match completion at 100, and round reset.
-3. [ ] Add deterministic scoring, tie, depletion, and multi-round match tests.
+1. [x] Execute voluntary and automatic-call final turns from a pending queue; skip the caller, preserve active-turn accounting after reaction calls, and reuse normal draw/resolution/ability commands without reactions or further calls.
+2. [x] Resolve last-card draws and penalty depletion at their specified boundaries; retain reaction windows after penalty depletion and apply +10 penalties when no card remains.
+3. [x] Apply caller/no-caller scoring and doubling after adding hand values and penalties; accumulate scores and complete the match at cumulative >=100 with all tied-lowest winners.
+4. [x] Reset round-only cards, penalties, caller, and knowledge; preserve player identity/seating/host/cumulative scores; reshuffle with deterministic randomness, deal four cards, require fresh peeks, and use globally advancing reaction-window IDs.
+5. [x] Expose structured round scores/reason/cumulative scores/winners/final-turn queues and reveal hands only after round scoring.
+6. [x] Add deterministic 2–10 player voluntary-call scenarios, four-player automatic-call ordering, final abilities/timeouts, depletion/penalty cases, score-rule variants, reset checks, idempotency checks, and a complete multi-round match simulation.
 
-**P2C acceptance:** not complete. Full rulebook simulation, final-turn execution, scoring, and match completion remain outstanding.
+**P2C acceptance:** complete for the pure C# engine. No new rule ambiguity was found; edge timing follows rulebook v1.1. The server remains lobby-only, and P2C does not imply SignalR/Unity gameplay integration.
 
 ## P3 — connected lobby + game UI
 
-1. Define a versioned message contract; connect Unity client to the existing room lobby with an Android IL2CPP-compatible network stack.
-2. Show Create/Join/Leave room with real responses; host settings and 2–10 player list.
-3. Start real matches from the lobby; display only per-player authorized card information, turn phase/timers, reaction Done and scores.
-4. Exercise two Android/Editor clients simultaneously; test reconnect, cleanup and stale action protection.
+1. Define versioned public/private snapshots and action/result contracts from the P2C core projections; add per-room serialized engine ownership and authoritative timeout scheduling.
+2. Connect Unity to the existing lobby using an Android IL2CPP-compatible transport; verify Create/Join/Leave and host settings/player roster with two clients.
+3. Start a server-owned match and map trusted player IDs to `ProcessAction`; deliver public views to the room and private views only to the entitled player. Do not send internal engine state.
+4. Add reconnect/room cleanup behavior, stale action/window protection, and integration tests for concurrent submissions and deadlines.
+5. Validate complete rounds on two clients, then complete a full match before claiming P3 gameplay acceptance.
 
 **P3 acceptance:** at least two clients complete a real round using the server and observe consistent, private information.
 
@@ -115,3 +120,12 @@ When completing a milestone, link its commit/PR, add the validation command/resu
 - `dotnet build core/Alzheimer.Core` — passed; 0 warnings, 0 errors.
 - `dotnet build server/Alzheimer.Server` — passed; 0 warnings, 0 errors.
 - Unity, SignalR gameplay, persistence, and multiplayer transport tests were not run; they are outside P2B and are not implemented.
+
+### P2C validation run (2026-11-25)
+
+- `dotnet run --project tests/Alzheimer.SmokeTests` — passed; 1,869 assertions, including existing P1/P2A/P2B regressions and P2C scenarios.
+- `dotnet build core/Alzheimer.Core -c Release` — passed; 0 warnings, 0 errors.
+- `dotnet build server/Alzheimer.Server -c Release` — passed; 0 warnings, 0 errors.
+- The deterministic full-match test completed through two exhausted rounds to match end. Seed 1901: round 1 P1 43→86 (cumulative 86), P2 24→48; round 2 P1 26→52 (cumulative 138), P2 54→108 (cumulative 156); P1 won. Round resets preserved host/player identity while using new card IDs and resetting private knowledge.
+- Unity Editor/tests, Android APK build, SignalR gameplay, persistence, and two-client multiplayer were not run; they are outside P2C. The Android device confirmation remains owner-reported only.
+- No unresolved rule ambiguity was found in the implemented P2C paths; the canonical v1.1 rulebook was unchanged.

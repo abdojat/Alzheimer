@@ -304,12 +304,14 @@ internal static class ReactionTests
             new ThrowReactionCard(0, publicBefore.ReactionWindowId!.Value, Id(801)));
         var view = engine.GetPublicView();
 
-        check(result.Accepted && view.CallerId == "P1" && view.Phase == GamePhase.FinalPhase,
+        check(result.Accepted && view.CallerId == "P1" && view.IsFinalTurnMode
+            && view.Phase == GamePhase.FinalPhase && view.ActivePlayerId == "P2",
             "a successful empty-hand reaction automatically registers the sole caller");
         check(view.ActivePlayerId == activePlayer,
             "automatic calls during another player's reaction preserve the active-player context");
-        check(view.RequiredFinalTurnPlayerIds.SequenceEqual(new[] { activePlayer }),
-            "the engine records subsequent turns for every non-caller, including the active player");
+        check(view.RequiredFinalTurnPlayerIds.SequenceEqual(new[] { activePlayer })
+            && view.PendingFinalTurnPlayerIds.SequenceEqual(new[] { activePlayer }),
+            "the active player's in-progress turn is excluded and scheduled as their subsequent final turn");
         check(view.DiscardPile[^1].PhysicalCardId == p1Card.PhysicalCardId,
             "the successful final throw is retained face up");
         var staleThrow = engine.ProcessAction(

@@ -36,4 +36,17 @@ public static class RoundScorer
 
     public static bool IsMatchOver(IEnumerable<int> cumulativeScores) =>
         cumulativeScores.Any(score => score >= 100);
+
+    public static IReadOnlyList<string> GetMatchWinners(IReadOnlyDictionary<string, int> cumulativeScores)
+    {
+        ArgumentNullException.ThrowIfNull(cumulativeScores);
+        if (cumulativeScores.Count == 0)
+            throw new ArgumentException("At least one cumulative score is required.", nameof(cumulativeScores));
+
+        var lowestScore = cumulativeScores.Values.Min();
+        return Array.AsReadOnly(cumulativeScores
+            .Where(pair => pair.Value == lowestScore)
+            .Select(pair => pair.Key)
+            .ToArray());
+    }
 }

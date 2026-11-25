@@ -11,7 +11,7 @@ This file applies to the **entire repository**. Read it before changing code. Do
 
 ## Repository map
 
-- `core/Alzheimer.Core/`: pure .NET 10 utilities, the P1 deterministic round foundation, P2A Jack/Queen/King abilities, and P2B reactions with authoritative deadlines. P2C final-turn execution and full round/match completion are not implemented.
+- `core/Alzheimer.Core/`: pure .NET 10 rules engine with deterministic setup and private peeks, J/Q/K abilities, rank-only reactions, executable final turns, round scoring, draw-exhaustion handling, and match progression through cumulative score 100.
 - `server/Alzheimer.Server/`: ASP.NET Core 10 / SignalR **lobby only**; in-memory rooms; no live gameplay, private card delivery or turn management yet.
 - `tests/Alzheimer.SmokeTests/`: executable basic checks. Existing tests do **not** prove gameplay is finished.
 - `client/Alzheimer.Client/`: Unity 6 editor project for an Android portrait client, uGUI prototype and Android build script.
@@ -41,6 +41,7 @@ This file applies to the **entire repository**. Read it before changing code. Do
 - Zero-card hand auto-calls; suppress reaction throwing immediately; when triggered outside that player's turn, each other player must get a subsequent turn. The caller takes no further turns.
 - Drawing the last card: resolve it; offer voluntary call if eligible; if no call, reaction window still occurs before depletion ends round. When no caller and draw pile exhausted, double **everyone's** base round score.
 - Caller uniquely lowest => double all other players; otherwise (including tie) double caller. Penalties count before doubling. Accumulate scores until anyone reaches >=100; lowest cumulative score wins; tied lowest players share the win.
+- Final turns use the ordinary mandatory-draw/resolution/ability flow, skip the caller, suppress calls/reactions, and proceed clockwise once per eligible player. Round completion reveals hands and scores once; a continuing match resets cards/knowledge and starts the next round with the same host.
 - Full edge cases and exact timing: read the canonical rulebook.
 
 ## Server and privacy constraints

@@ -3,8 +3,8 @@
 A starter implementation for the customized Alzheimer multiplayer card game. Includes:
 
 - The confirmed v1.1 rulebook under `docs/`.
-- A pure C# rules library with deck generation, card scores, reaction-rank validation, scoring utilities, and a deterministic P1/P2A round engine.
-- A no-NuGet-dependency smoke test console app covering utilities, P1 transitions, and P2A special abilities.
+- A pure C# rules library with deterministic P1/P2A/P2B/P2C gameplay, final turns, exhaustion-aware scoring, and match progression.
+- A no-NuGet-dependency smoke test console app covering utility, rules, regression, privacy, and deterministic full-match scenarios.
 - An ASP.NET Core 10 + SignalR **lobby-only** server (create/join rooms and player lists). The server does **not** yet implement game turns, private card delivery, timers, or online card actions.
 - A small **local UI smoke test** Unity MonoBehaviour. This is *not* a functional game.
 
@@ -22,11 +22,11 @@ From the repository root:
 dotnet run --project tests/Alzheimer.SmokeTests
 ```
 
-You should see `All smoke tests passed.` The tests cover deck and player configurations, deterministic setup and IDs, private peeks, mandatory draw, discard/replace, call timing, special-ability resolution and timeouts, rank-only reaction chains, persistent Queen matching, Done/deadlines, wrong-throw penalties, automatic calls, rejection atomicity, privacy-safe projections, turn order, card conservation, and existing card/scoring utilities.
+The runner reports the exact number of passing assertions. Coverage includes deck/player configurations, deterministic setup and IDs, private peeks, mandatory draw, discard/replace, call timing, final-turn sequencing for 2–10 players, final-turn abilities/timeouts, rank-only reaction chains, persistent Queen matching, Done/deadlines, wrong-throw penalties and depletion, scoring/doubling, privacy-safe projections, round reset, and a complete deterministic match simulation.
 
-## P1/P2B round engine API
+## P1–P2C round engine API
 
-`AlzheimerRoundEngine.StartNewRound(...)` creates a round in `WaitingForInitialPeeks`. Supply the clockwise player list, host ID, `RoomSettings`, an optional seeded `Random`, optional physical-card-ID factory, and optional `IGameClock`. The engine rotates the supplied clockwise order so the host is first, deals four unknown cards to each player, and keeps the remaining cards in its private draw pile.
+`AlzheimerRoundEngine.StartNewRound(...)` creates a match in round 1, in `WaitingForInitialPeeks`. Supply the clockwise player list, host ID, `RoomSettings`, an optional seeded `Random`, optional physical-card-ID factory, and optional `IGameClock`. The engine rotates the supplied clockwise order so the host is first, deals four unknown cards to each player, and keeps the remaining cards in its private draw pile. The same engine retains cumulative scores and starts later rounds automatically.
 
 Submit validated actions with `ProcessAction(playerId, action)`. Initial peeks are submitted as `PeekInitialCards(firstIndex, secondIndex)` by each player. Once all have peeked, the active player must `DrawCard`, then resolve the private draw by:
 
@@ -89,9 +89,13 @@ Apply("guest", new MarkReactionDone(guestReactionWindow, Guid.NewGuid()));
 
 `EndTurn` opens a 30-second reaction window using the injected authoritative UTC clock. `PublicGameView` exposes the window ID, deadline, and Done players; all players may submit `ThrowReactionCard(handIndex, reactionWindowId, commandId)` repeatedly, or mark themselves Done once with `MarkReactionDone(reactionWindowId, commandId)`. A unique command ID prevents replay, and the window ID rejects stale submissions. Throws use server-owned card ranks, match rank only against the ordinary current top, and never activate abilities. A wrong attempt leaves that card in place, privately reveals it to its owner, and immediately adds an unknown penalty card, or records +10 round-penalty points when the draw pile is empty.
 
-Queen's two matching ranks persist for the full reaction window, and its selected card is restored to the pile top when the window closes. A successful throw that empties a hand records the automatic caller, closes reactions immediately, and preserves the active seat plus the required subsequent-turn order for P2C; Queen-empty-hand calls still cancel the upcoming window. `CompleteReactionWindow()` is a trusted progression hook that refuses to close an early window; the engine also processes due deadlines through `ProcessTimeouts()` and before accepting actions. The engine is synchronous, not thread-safe: production server code must serialize per-room commands and call timeouts from server-owned scheduling. These APIs are not wired to SignalR, and no transport, persistence, or Unity gameplay is included.
+Queen's two matching ranks persist for the full reaction window, and its selected card is restored to the pile top when the window closes. A successful throw that empties a hand records the automatic caller, closes reactions immediately, and preserves the active seat plus the required subsequent-turn order; Queen-empty-hand calls still cancel the upcoming window. `CompleteReactionWindow()` is a trusted progression hook that refuses to close an early window; the engine also processes due deadlines through `ProcessTimeouts()` and before accepting actions. The engine is synchronous, not thread-safe: production server code must serialize per-room commands and call timeouts from server-owned scheduling. These APIs are not wired to SignalR, and no transport, persistence, or Unity gameplay is included.
 
-P2B implements J/Q/K abilities and reactions. P2C final-turn execution, draw-exhaustion round accounting, scoring/doubling, cumulative match completion, and round reset remain unimplemented; `RequiredFinalTurnPlayerIds` and per-player `RoundPenaltyPoints` preserve state needed for that work. The server remains lobby-only.
+After a voluntary or automatic call, `FinalPhase` identifies the next eligible player who must draw. `RequiredFinalTurnPlayerIds` records the complete clockwise schedule and `PendingFinalTurnPlayerIds` advances as turns are completed. Final turns reuse mandatory draw, keep/discard/replace and J/Q/K ability processing; `CallAlzheimer` is disabled and `EndTurn` advances directly without a reaction window. The caller is skipped. When a reaction throw causes the call, the active player's in-progress turn is not counted as their subsequent turn.
+
+The last normal draw resolves before the call/end decision; an uncalled last-card turn still opens its reaction window. A final-card penalty does not close an active reaction window, and each later undrawn penalty adds 10 points. On completion, `RoundScorer` sums hand values and penalties before applying the caller-specific or no-caller depletion doubling. `PublicGameView.LastCompletedRound` contains base/adjusted/cumulative scores, reason, caller, required/pending final-turn IDs, and the end-of-round hand reveal; hand identities remain private before scoring. If no cumulative score reaches 100, a fresh shuffled deck and private-knowledge reset start the next round with the same host/seating. At or above 100, `MatchCompleted` and `WinnerPlayerIds` expose the lowest cumulative-score winner(s).
+
+The core now simulates full matches but remains disconnected from SignalR: the server is lobby-only, and no transport, persistence, or Unity gameplay is included.
 
 ## GitHub Actions CI
 
@@ -172,7 +176,7 @@ Alzheimer/
 
 ## Roadmap
 
-The current implementation status and P1/P2A/P2B/P2C acceptance boundaries are tracked in [docs/DEVELOPMENT_ROADMAP.md](docs/DEVELOPMENT_ROADMAP.md). P1 provides deterministic ordinary turns; P2A adds abilities; P2B adds deterministic reactions. P2C final-turn execution, scoring, and match completion remain outstanding. Unity connectivity and production concerns follow in P3/P4.
+The current implementation status and P1/P2A/P2B/P2C acceptance boundaries are tracked in [docs/DEVELOPMENT_ROADMAP.md](docs/DEVELOPMENT_ROADMAP.md). P1 provides deterministic ordinary turns; P2A adds abilities; P2B adds deterministic reactions; P2C completes final turns, exhaustion/scoring, match progression, and round reset. Unity connectivity and production concerns follow in P3/P4.
 
 ## Key implementation rules
 
@@ -182,4 +186,4 @@ The current implementation status and P1/P2A/P2B/P2C acceptance boundaries are t
 - Use a per-room lock/serialized action queue for simultaneous throws. No player has priority by game rule, but the server must decide an order deterministically.
 - Server-side absolute UTC deadlines govern ability/reaction timers; clients only display them. The core engine enforces both P2A ability and P2B reaction deadlines.
 - Persist a match state transition/event log before adding real-money or ranked play. Do not rely on Unity physics/network sync for this card game.
-- Confirm all special edge cases against `docs/Alzheimer_Card_Game_Rules_v1.1.md`. The repository includes P1 round foundations, P2A abilities and P2B reactions, but the server is still lobby-only and P2C scoring remains unimplemented.
+- Confirm all special edge cases against `docs/Alzheimer_Card_Game_Rules_v1.1.md`. P1–P2C are implemented in the pure C# engine; server gameplay/networking and Unity integration remain unimplemented.

@@ -226,14 +226,23 @@ internal static class RoundEngineTests
 
         var called = engine.ProcessAction("P1", new CallAlzheimer());
         check(called.Accepted && engine.GetPublicView().CallerId == "P1", "caller is recorded after card resolution");
-        check(engine.GetPublicView().Phase == GamePhase.FinalPhase, "a call enters the prepared final phase");
+        check(engine.GetPublicView().Phase == GamePhase.FinalPhase
+            && engine.GetPublicView().IsFinalTurnMode
+            && engine.GetPublicView().ActivePlayerId == "P2",
+            "a call immediately starts the next player's executable final turn");
         var secondCall = engine.ProcessAction("P2", new CallAlzheimer());
         check(!secondCall.Accepted && secondCall.ErrorCode == GameErrorCode.CallerAlreadyRecorded
             && engine.GetPublicView().CallerId == "P1",
             "a later player cannot replace the round's caller");
-        var endAfterCall = engine.ProcessAction("P1", new EndTurn());
-        check(!endAfterCall.Accepted && engine.GetPublicView().Phase == GamePhase.FinalPhase,
-            "caller cannot continue through the ordinary turn pipeline in P1");
+        var callerDraw = engine.ProcessAction("P1", new DrawCard());
+        check(!callerDraw.Accepted && callerDraw.ErrorCode == GameErrorCode.NotActivePlayer,
+            "caller is skipped while the other player takes a final turn");
+        check(!engine.GetPlayerView("P2").CanCallAlzheimer && !engine.GetPlayerView("P2").CanEndTurn,
+            "final turn still requires its mandatory draw");
+        engine.ProcessAction("P2", new DrawCard());
+        engine.ProcessAction("P2", new DiscardDrawnCard());
+        check(!engine.GetPlayerView("P2").CanCallAlzheimer && engine.GetPlayerView("P2").CanEndTurn,
+            "post-resolution final prompt disables a second call and permits turn completion");
     }
 
     private static void TestUnknownCardReplacementAndLastDraw(Action<bool, string> check)
@@ -276,8 +285,9 @@ internal static class RoundEngineTests
                 check(exhaustion.GetPublicView().Phase == GamePhase.AwaitingReactionResolution,
                     "last draw still opens its reaction-resolution phase");
                 check(CompleteByMarkingDone(exhaustion).Accepted
-                    && exhaustion.GetPublicView().Phase == GamePhase.RoundCompleted,
-                    "round completes only after the last draw reaction hook");
+                    && exhaustion.GetPublicView().RoundNumber == 2
+                    && exhaustion.GetPublicView().LastCompletedRound?.Reason == RoundCompletionReason.DrawPileExhausted,
+                    "round is scored and the next round starts only after the last draw reaction hook");
                 break;
             }
 

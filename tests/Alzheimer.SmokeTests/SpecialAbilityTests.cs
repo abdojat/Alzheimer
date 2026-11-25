@@ -134,10 +134,19 @@ internal static class SpecialAbilityTests
         check(queenAbilitiesUsed == 4, "four Queen abilities reduce the player's hand to zero");
         check(view.Players.Single(player => player.PlayerId == "P1").HandCount == 0,
             "Queen can leave its user with an empty hand");
-        check(view.CallerId == "P1" && view.Phase == GamePhase.FinalPhase,
-            "empty-hand Queen ability immediately records the automatic Alzheimer call");
+        check(view.CallerId == "P1" && view.IsFinalTurnMode
+            && view.Phase == GamePhase.FinalPhase && view.ActivePlayerId == "P2",
+            "empty-hand Queen ability immediately starts the remaining final turns");
         check(view.QueenReactionTargets is null,
             "Queen-caused automatic call does not leave an upcoming reaction window");
+        var finalPlayer = view.ActivePlayerId;
+        check(engine.ProcessAction(finalPlayer, new DrawCard()).Accepted
+            && engine.ProcessAction(finalPlayer, new DiscardDrawnCard()).Accepted
+            && engine.ProcessAction(finalPlayer, new EndTurn()).Accepted,
+            "the other player completes their final normal turn after a Queen auto-call");
+        check(engine.GetPublicView().LastCompletedRound?.CallerId == "P1"
+            && engine.GetPublicView().LastCompletedRound?.Reason == RoundCompletionReason.FinalTurnsCompleted,
+            "Queen auto-call round scores after the final turn without opening reactions");
         AssertCardConservation(engine, check, "empty-hand Queen ability");
     }
 
@@ -360,7 +369,8 @@ internal static class SpecialAbilityTests
             var engine = CreateEngine(2, 2, seed);
             CompletePeeks(engine, "P1", "P2");
             var used = 0;
-            while (engine.GetPublicView().Phase is not (GamePhase.FinalPhase or GamePhase.RoundCompleted)
+            while (engine.GetPublicView().CallerId is null
+                && engine.GetPublicView().Phase == GamePhase.AwaitingDraw
                 && engine.GetPublicView().DrawPileCount > 0)
             {
                 var activePlayer = engine.GetPublicView().ActivePlayerId;
@@ -377,7 +387,7 @@ internal static class SpecialAbilityTests
                     engine.ProcessAction(activePlayer, new DiscardDrawnCard());
                 }
 
-                if (engine.GetPublicView().Phase == GamePhase.FinalPhase)
+                if (engine.GetPublicView().CallerId is not null)
                     break;
                 engine.ProcessAction(activePlayer, new EndTurn());
                 CompleteByMarkingDone(engine);

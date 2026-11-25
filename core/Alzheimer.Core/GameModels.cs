@@ -12,6 +12,12 @@ public enum GamePhase
     RoundCompleted
 }
 
+public enum RoundCompletionReason
+{
+    FinalTurnsCompleted,
+    DrawPileExhausted
+}
+
 public enum CardKnowledge
 {
     Unknown,
@@ -108,7 +114,9 @@ public enum GameEventType
     IncorrectReactionThrow,
     ReactionDone,
     ReactionWindowCompleted,
-    RoundCompleted
+    RoundCompleted,
+    RoundStarted,
+    MatchCompleted
 }
 
 public sealed record GameEvent(GameEventType Type, string? PlayerId = null, int? HandIndex = null);
@@ -143,14 +151,39 @@ public sealed record PublicGameView(
     long? ReactionWindowId,
     DateTimeOffset? ReactionDeadlineUtc,
     IReadOnlyList<string> ReactionDonePlayerIds,
-    IReadOnlyList<string> RequiredFinalTurnPlayerIds);
+    IReadOnlyList<string> RequiredFinalTurnPlayerIds,
+    IReadOnlyList<string> PendingFinalTurnPlayerIds,
+    bool IsFinalTurnMode,
+    int RoundNumber,
+    RoundCompletionView? LastCompletedRound,
+    bool MatchCompleted,
+    IReadOnlyList<string> WinnerPlayerIds);
 
 public sealed record PlayerGameView(
     PublicGameView Public,
     IReadOnlyList<CardSlotView> OwnHand,
     CardView? PendingDrawnCard,
     IReadOnlyList<DrawResolutionOption> AvailableDrawResolutions,
-    DateTimeOffset? AbilityDeadlineUtc);
+    DateTimeOffset? AbilityDeadlineUtc,
+    bool CanCallAlzheimer,
+    bool CanEndTurn);
+
+public sealed record PlayerRoundScoreView(
+    string PlayerId,
+    int BaseScore,
+    int AdjustedRoundScore,
+    int CumulativeScore);
+
+public sealed record RoundEndHandView(string PlayerId, IReadOnlyList<CardView> Cards);
+
+public sealed record RoundCompletionView(
+    int RoundNumber,
+    RoundCompletionReason Reason,
+    string? CallerId,
+    IReadOnlyList<PlayerRoundScoreView> Scores,
+    IReadOnlyList<RoundEndHandView> RevealedHands,
+    IReadOnlyList<string> RequiredFinalTurnPlayerIds,
+    IReadOnlyList<string> PendingFinalTurnPlayerIds);
 
 public sealed record QueenReactionTargetsView(
     CardRank QueenRank,

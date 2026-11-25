@@ -4,12 +4,16 @@ public sealed class AlzheimerRoundEngine
 {
     private readonly MatchState _state;
     private readonly IGameClock _clock;
-    private readonly Dictionary<string, PlayerState> _playersById;
+    private Dictionary<string, PlayerState> _playersById;
+    private readonly Random _random;
+    private readonly Func<Guid> _physicalCardIdFactory;
 
     private AlzheimerRoundEngine(MatchState state, IGameClock clock)
     {
         _state = state;
         _clock = clock;
+        _random = state.Random;
+        _physicalCardIdFactory = state.PhysicalCardIdFactory;
         _playersById = state.Round.Players.ToDictionary(player => player.PlayerId, StringComparer.Ordinal);
         ValidateInvariants();
     }
@@ -40,8 +44,34 @@ public sealed class AlzheimerRoundEngine
         if (hostIndex < 0)
             throw new ArgumentException("The host must be one of the round players.", nameof(hostPlayerId));
 
-        var orderedPlayers = Enumerable.Range(0, players.Count)
+        var orderedDefinitions = Enumerable.Range(0, players.Count)
             .Select(offset => players[(hostIndex + offset) % players.Count])
+            .ToArray();
+        random ??= new Random();
+        physicalCardIdFactory ??= Guid.NewGuid;
+        var round = CreateRound(orderedDefinitions, hostPlayerId, settings, random, physicalCardIdFactory, 1);
+        var match = new MatchState
+        {
+            CumulativeScores = orderedDefinitions.ToDictionary(player => player.PlayerId, _ => 0, StringComparer.Ordinal),
+            Players = Array.AsReadOnly(orderedDefinitions),
+            Settings = settings,
+            Random = random,
+            PhysicalCardIdFactory = physicalCardIdFactory,
+            Round = round
+        };
+
+        return new AlzheimerRoundEngine(match, clock ?? new SystemGameClock());
+    }
+
+    private static RoundState CreateRound(
+        IReadOnlyList<PlayerDefinition> orderedDefinitions,
+        string hostPlayerId,
+        RoomSettings settings,
+        Random random,
+        Func<Guid> physicalCardIdFactory,
+        int roundNumber)
+    {
+        var orderedPlayers = orderedDefinitions
             .Select(player => new PlayerState(player.PlayerId, player.DisplayName))
             .ToList();
         var cards = DeckFactory.CreateShuffled(settings.DeckCount, random, physicalCardIdFactory);
@@ -62,15 +92,10 @@ public sealed class AlzheimerRoundEngine
             DrawPile = new DrawPile(cards.Skip(cardIndex)),
             DiscardPile = new DiscardPile(),
             Turn = new TurnState(0),
-            Phase = GamePhase.WaitingForInitialPeeks
+            Phase = GamePhase.WaitingForInitialPeeks,
+            RoundNumber = roundNumber
         };
-        var match = new MatchState
-        {
-            CumulativeScores = orderedPlayers.ToDictionary(player => player.PlayerId, _ => 0, StringComparer.Ordinal),
-            Round = round
-        };
-
-        return new AlzheimerRoundEngine(match, clock ?? new SystemGameClock());
+        return round;
     }
 
     public TransitionResult ProcessAction(string? playerId, GameAction? action)
@@ -176,7 +201,13 @@ public sealed class AlzheimerRoundEngine
                 .Where(player => round.ReactionDonePlayerIds.Contains(player.PlayerId))
                 .Select(player => player.PlayerId)
                 .ToArray()),
-            Array.AsReadOnly(round.RequiredFinalTurnPlayerIds.ToArray()));
+            Array.AsReadOnly(round.RequiredFinalTurnPlayerIds.ToArray()),
+            Array.AsReadOnly(round.PendingFinalTurnPlayerIds.ToArray()),
+            round.IsFinalTurnMode,
+            round.RoundNumber,
+            _state.LastCompletedRound,
+            _state.MatchCompleted,
+            Array.AsReadOnly(_state.WinnerPlayerIds.ToArray()));
     }
 
     public PlayerGameView GetPlayerView(string playerId)
@@ -205,7 +236,11 @@ public sealed class AlzheimerRoundEngine
             Array.AsReadOnly(ownHand),
             pendingDrawnCard is null ? null : ToCardView(pendingDrawnCard),
             GetAvailableDrawResolutions(playerId, isActivePlayer),
-            isActivePlayer ? round.Turn.AbilityDeadlineUtc : null);
+            isActivePlayer ? round.Turn.AbilityDeadlineUtc : null,
+            isActivePlayer
+                && round.CallerId is null
+                && round.Phase == GamePhase.AwaitingPostResolutionDecision,
+            isActivePlayer && round.Phase == GamePhase.AwaitingPostResolutionDecision);
     }
 
     private TransitionResult Peek(string playerId, PeekInitialCards action, DateTimeOffset occurredAtUtc)
@@ -245,7 +280,8 @@ public sealed class AlzheimerRoundEngine
     private TransitionResult Draw(string playerId, DateTimeOffset occurredAtUtc)
     {
         var round = _state.Round;
-        if (round.Phase != GamePhase.AwaitingDraw)
+        if (round.Phase != GamePhase.AwaitingDraw
+            && !(round.IsFinalTurnMode && round.Phase == GamePhase.FinalPhase))
             return Rejected(GameErrorCode.InvalidPhase, occurredAtUtc);
         if (!IsActivePlayer(playerId))
             return Rejected(GameErrorCode.NotActivePlayer, occurredAtUtc);
@@ -358,14 +394,24 @@ public sealed class AlzheimerRoundEngine
         if (hand.Count == 0)
         {
             var isFirstCaller = round.CallerId is null;
-            round.CallerId ??= playerId;
             if (isFirstCaller)
+            {
+                round.CallerId = playerId;
                 RecordRequiredFinalTurns(round, playerId);
+                round.IsFinalTurnMode = true;
+                round.PendingFinalTurnPlayerIds.AddRange(round.RequiredFinalTurnPlayerIds);
+            }
             round.QueenReactionTargets = null;
             ClearReactionWindow(round);
-            round.Phase = GamePhase.FinalPhase;
             if (isFirstCaller)
+            {
                 events.Add(new GameEvent(GameEventType.AlzheimerCalled, playerId));
+                events.AddRange(BeginFinalTurns());
+            }
+            else
+            {
+                round.Phase = GamePhase.AwaitingPostResolutionDecision;
+            }
         }
         else
         {
@@ -489,10 +535,13 @@ public sealed class AlzheimerRoundEngine
 
         round.CallerId = playerId;
         RecordRequiredFinalTurns(round, playerId);
+        round.IsFinalTurnMode = true;
+        round.PendingFinalTurnPlayerIds.AddRange(round.RequiredFinalTurnPlayerIds);
         round.QueenReactionTargets = null;
-        round.Phase = GamePhase.FinalPhase;
+        var events = new List<GameEvent> { new(GameEventType.AlzheimerCalled, playerId) };
+        events.AddRange(BeginFinalTurns());
         ValidateInvariants();
-        return Accepted(occurredAtUtc, new[] { new GameEvent(GameEventType.AlzheimerCalled, playerId) });
+        return Accepted(occurredAtUtc, events);
     }
 
     private TransitionResult End(string playerId, DateTimeOffset occurredAtUtc)
@@ -503,8 +552,16 @@ public sealed class AlzheimerRoundEngine
         if (!IsActivePlayer(playerId))
             return Rejected(GameErrorCode.NotActivePlayer, occurredAtUtc);
 
-        round.ReactionWindowSequence++;
-        round.ReactionWindowId = round.ReactionWindowSequence;
+        if (round.IsFinalTurnMode)
+        {
+            var events = new List<GameEvent> { new(GameEventType.TurnEnded, playerId) };
+            FinishFinalTurn(events);
+            ValidateInvariants();
+            return Accepted(occurredAtUtc, events);
+        }
+
+        _state.ReactionWindowSequence++;
+        round.ReactionWindowId = _state.ReactionWindowSequence;
         round.ReactionDeadlineUtc = occurredAtUtc.AddSeconds(30);
         round.ReactionDonePlayerIds.Clear();
         round.ProcessedReactionCommandIds.Clear();
@@ -556,11 +613,13 @@ public sealed class AlzheimerRoundEngine
             {
                 round.CallerId = playerId;
                 RecordRequiredFinalTurns(round, playerId);
+                round.IsFinalTurnMode = true;
+                round.PendingFinalTurnPlayerIds.AddRange(round.RequiredFinalTurnPlayerIds);
                 events.Add(new GameEvent(GameEventType.AlzheimerCalled, playerId));
                 events.Add(new GameEvent(GameEventType.ReactionWindowCompleted,
                     round.Players[round.Turn.ActiveSeatIndex].PlayerId));
                 CloseReactionWindow(round, restoreQueenTop: true);
-                round.Phase = GamePhase.FinalPhase;
+                events.AddRange(BeginFinalTurns());
             }
         }
         else
@@ -663,8 +722,7 @@ public sealed class AlzheimerRoundEngine
         CloseReactionWindow(round, restoreQueenTop: true);
         if (round.DrawPile.Count == 0)
         {
-            round.Phase = GamePhase.RoundCompleted;
-            events.Add(new GameEvent(GameEventType.RoundCompleted));
+            events.AddRange(CompleteRound(RoundCompletionReason.DrawPileExhausted));
         }
         else
         {
@@ -707,6 +765,109 @@ public sealed class AlzheimerRoundEngine
                 finalTurns.Add(playerId);
         }
         round.RequiredFinalTurnPlayerIds = Array.AsReadOnly(finalTurns.ToArray());
+    }
+
+    private List<GameEvent> BeginFinalTurns()
+    {
+        var round = _state.Round;
+        if (round.DrawPile.Count == 0)
+            return CompleteRound(RoundCompletionReason.DrawPileExhausted);
+        if (round.PendingFinalTurnPlayerIds.Count == 0)
+            return CompleteRound(RoundCompletionReason.FinalTurnsCompleted);
+
+        round.Turn.ActiveSeatIndex = round.Players.FindIndex(
+            player => player.PlayerId == round.PendingFinalTurnPlayerIds[0]);
+        round.Phase = GamePhase.FinalPhase;
+        return new List<GameEvent>
+        {
+            new(GameEventType.TurnStarted, round.PendingFinalTurnPlayerIds[0])
+        };
+    }
+
+    private void FinishFinalTurn(List<GameEvent> events)
+    {
+        var round = _state.Round;
+        if (round.PendingFinalTurnPlayerIds.Count == 0
+            || round.PendingFinalTurnPlayerIds[0] != round.Players[round.Turn.ActiveSeatIndex].PlayerId)
+            throw new InvalidOperationException("The active final turn is not the next required player.");
+
+        if (round.DrawPile.Count == 0)
+        {
+            events.AddRange(CompleteRound(RoundCompletionReason.DrawPileExhausted));
+            return;
+        }
+
+        round.PendingFinalTurnPlayerIds.RemoveAt(0);
+        if (round.PendingFinalTurnPlayerIds.Count == 0)
+        {
+            events.AddRange(CompleteRound(RoundCompletionReason.FinalTurnsCompleted));
+            return;
+        }
+
+        round.Turn.ActiveSeatIndex = round.Players.FindIndex(
+            player => player.PlayerId == round.PendingFinalTurnPlayerIds[0]);
+        round.Phase = GamePhase.FinalPhase;
+        events.Add(new GameEvent(GameEventType.TurnStarted, round.PendingFinalTurnPlayerIds[0]));
+    }
+
+    private List<GameEvent> CompleteRound(RoundCompletionReason reason)
+    {
+        var round = _state.Round;
+        if (round.ScoreApplied)
+            return new List<GameEvent>();
+
+        var baseScores = round.Players
+            .Select(player => new PlayerRoundBase(
+                player.PlayerId,
+                player.Hand.Sum(slot => slot.Card.Points),
+                player.UndrawnPenaltyPoints))
+            .ToArray();
+        var adjustedScores = RoundScorer.Calculate(baseScores, round.CallerId);
+
+        foreach (var player in round.Players)
+            _state.CumulativeScores[player.PlayerId] = checked(
+                _state.CumulativeScores[player.PlayerId] + adjustedScores[player.PlayerId]);
+
+        var scoreViews = round.Players.Select(player => new PlayerRoundScoreView(
+            player.PlayerId,
+            baseScores.Single(score => score.PlayerId == player.PlayerId).BasePoints,
+            adjustedScores[player.PlayerId],
+            _state.CumulativeScores[player.PlayerId])).ToArray();
+        var revealedHands = round.Players.Select(player => new RoundEndHandView(
+            player.PlayerId,
+            Array.AsReadOnly(player.Hand.Select(slot => ToCardView(slot.Card)).ToArray()))).ToArray();
+
+        _state.LastCompletedRound = new RoundCompletionView(
+            round.RoundNumber,
+            reason,
+            round.CallerId,
+            Array.AsReadOnly(scoreViews),
+            Array.AsReadOnly(revealedHands),
+            Array.AsReadOnly(round.RequiredFinalTurnPlayerIds.ToArray()),
+            Array.AsReadOnly(round.PendingFinalTurnPlayerIds.ToArray()));
+        round.ScoreApplied = true;
+        round.Phase = GamePhase.RoundCompleted;
+
+        var events = new List<GameEvent> { new(GameEventType.RoundCompleted) };
+        if (RoundScorer.IsMatchOver(_state.CumulativeScores.Values))
+        {
+            _state.MatchCompleted = true;
+            _state.WinnerPlayerIds = RoundScorer.GetMatchWinners(_state.CumulativeScores);
+            events.Add(new GameEvent(GameEventType.MatchCompleted));
+            return events;
+        }
+
+        _state.Round = CreateRound(
+            _state.Players,
+            round.HostPlayerId,
+            _state.Settings,
+            _random,
+            _physicalCardIdFactory,
+            round.RoundNumber + 1);
+        _playersById = _state.Round.Players.ToDictionary(player => player.PlayerId, StringComparer.Ordinal);
+        events.Add(new GameEvent(GameEventType.RoundStarted, _state.Round.HostPlayerId));
+        ValidateInvariants();
+        return events;
     }
 
     private bool IsActivePlayer(string playerId) =>
@@ -755,7 +916,18 @@ public sealed class AlzheimerRoundEngine
                 != round.RequiredFinalTurnPlayerIds.Count
             || round.RequiredFinalTurnPlayerIds.Any(playerId =>
                 !_playersById.ContainsKey(playerId)
-                || string.Equals(playerId, round.CallerId, StringComparison.Ordinal)))
+                || string.Equals(playerId, round.CallerId, StringComparison.Ordinal))
+            || round.PendingFinalTurnPlayerIds.Distinct(StringComparer.Ordinal).Count()
+                != round.PendingFinalTurnPlayerIds.Count
+            || round.PendingFinalTurnPlayerIds.Any(playerId =>
+                !round.RequiredFinalTurnPlayerIds.Contains(playerId, StringComparer.Ordinal))
+            || (round.IsFinalTurnMode && round.CallerId is null)
+            || (!round.IsFinalTurnMode && round.PendingFinalTurnPlayerIds.Count != 0)
+            || (round.IsFinalTurnMode
+                && round.Phase != GamePhase.RoundCompleted
+                && round.PendingFinalTurnPlayerIds.Count != 0
+                && round.Players[round.Turn.ActiveSeatIndex].PlayerId != round.PendingFinalTurnPlayerIds[0])
+            || (round.CallerId is not null && reactionPhase))
             throw new InvalidOperationException("The round state violated reaction or final-turn identity invariants.");
     }
 

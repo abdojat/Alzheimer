@@ -3,7 +3,15 @@ namespace Alzheimer.Core;
 internal sealed class MatchState
 {
     public required Dictionary<string, int> CumulativeScores { get; init; }
-    public required RoundState Round { get; init; }
+    public required IReadOnlyList<PlayerDefinition> Players { get; init; }
+    public required RoomSettings Settings { get; init; }
+    public required Random Random { get; init; }
+    public required Func<Guid> PhysicalCardIdFactory { get; init; }
+    public required RoundState Round { get; set; }
+    public long ReactionWindowSequence { get; set; }
+    public RoundCompletionView? LastCompletedRound { get; set; }
+    public bool MatchCompleted { get; set; }
+    public IReadOnlyList<string> WinnerPlayerIds { get; set; } = Array.Empty<string>();
 }
 
 internal sealed class RoundState
@@ -14,15 +22,18 @@ internal sealed class RoundState
     public required DrawPile DrawPile { get; init; }
     public required DiscardPile DiscardPile { get; init; }
     public required TurnState Turn { get; init; }
+    public required int RoundNumber { get; init; }
     public GamePhase Phase { get; set; }
     public string? CallerId { get; set; }
     public QueenReactionTargets? QueenReactionTargets { get; set; }
-    public long ReactionWindowSequence { get; set; }
     public long? ReactionWindowId { get; set; }
     public DateTimeOffset? ReactionDeadlineUtc { get; set; }
     public HashSet<string> ReactionDonePlayerIds { get; } = new(StringComparer.Ordinal);
     public Dictionary<string, HashSet<Guid>> ProcessedReactionCommandIds { get; } = new(StringComparer.Ordinal);
     public IReadOnlyList<string> RequiredFinalTurnPlayerIds { get; set; } = Array.Empty<string>();
+    public List<string> PendingFinalTurnPlayerIds { get; } = new();
+    public bool IsFinalTurnMode { get; set; }
+    public bool ScoreApplied { get; set; }
 }
 
 internal sealed class PlayerState(string playerId, string displayName)
