@@ -110,7 +110,7 @@ internal static class SpecialAbilityTests
                 "Queen user can proceed to the reaction phase");
             check(engine.GetPublicView().QueenReactionTargets is not null,
                 "Queen's two-rank targets persist through the reaction phase");
-            check(engine.CompleteReactionWindow().Accepted, "Queen reaction phase can complete");
+            check(CompleteByMarkingDone(engine).Accepted, "Queen reaction phase can complete");
             check(engine.GetPublicView().DiscardPile.Last().PhysicalCardId == selected.PhysicalCardId,
                 "Queen-selected card is the discard top after the reaction phase");
             check(engine.GetPublicView().QueenReactionTargets is null,
@@ -380,7 +380,7 @@ internal static class SpecialAbilityTests
                 if (engine.GetPublicView().Phase == GamePhase.FinalPhase)
                     break;
                 engine.ProcessAction(activePlayer, new EndTurn());
-                engine.CompleteReactionWindow();
+                CompleteByMarkingDone(engine);
             }
 
             if (used == 4 && engine.GetPublicView().CallerId == "P1")
@@ -419,6 +419,24 @@ internal static class SpecialAbilityTests
             if (!result.Accepted)
                 throw new InvalidOperationException($"Initial peek failed for {playerId}: {result.ErrorCode}.");
         }
+
+    }
+
+    private static TransitionResult CompleteByMarkingDone(AlzheimerRoundEngine engine)
+    {
+        var view = engine.GetPublicView();
+        var windowId = view.ReactionWindowId
+            ?? throw new InvalidOperationException("No reaction window is active.");
+        TransitionResult? result = null;
+        foreach (var player in view.Players)
+        {
+            result = engine.ProcessAction(
+                player.PlayerId,
+                new MarkReactionDone(windowId, Guid.NewGuid()));
+            if (!result.Accepted)
+                throw new InvalidOperationException($"Could not mark {player.PlayerId} done: {result.ErrorCode}.");
+        }
+        return result ?? throw new InvalidOperationException("No players participated in the reaction window.");
     }
 
     private static string Snapshot(AlzheimerRoundEngine engine, params string[] playerIds) =>

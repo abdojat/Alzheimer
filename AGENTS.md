@@ -11,7 +11,7 @@ This file applies to the **entire repository**. Read it before changing code. Do
 
 ## Repository map
 
-- `core/Alzheimer.Core/`: pure .NET 10 utilities, the P1 deterministic round foundation, and P2A Jack/Queen/King abilities with authoritative ability deadlines. Reactions and full round/match completion are not implemented.
+- `core/Alzheimer.Core/`: pure .NET 10 utilities, the P1 deterministic round foundation, P2A Jack/Queen/King abilities, and P2B reactions with authoritative deadlines. P2C final-turn execution and full round/match completion are not implemented.
 - `server/Alzheimer.Server/`: ASP.NET Core 10 / SignalR **lobby only**; in-memory rooms; no live gameplay, private card delivery or turn management yet.
 - `tests/Alzheimer.SmokeTests/`: executable basic checks. Existing tests do **not** prove gameplay is finished.
 - `client/Alzheimer.Client/`: Unity 6 editor project for an Android portrait client, uGUI prototype and Android build script.

@@ -31,6 +31,8 @@ public sealed record ResolveQueenAbility(int HandIndex) : GameAction;
 public sealed record ResolveKingAbility(string TargetPlayerId, int OwnHandIndex, int TargetHandIndex) : GameAction;
 public sealed record CallAlzheimer : GameAction;
 public sealed record EndTurn : GameAction;
+public sealed record ThrowReactionCard(int HandIndex, long ReactionWindowId, Guid CommandId) : GameAction;
+public sealed record MarkReactionDone(long ReactionWindowId, Guid CommandId) : GameAction;
 
 public enum DrawResolutionOption
 {
@@ -80,6 +82,12 @@ public enum GameErrorCode
     InvalidAbilityTarget,
     AbilityDeadlineNotReached,
     AbilityWindowExpired,
+    ReactionDeadlineNotReached,
+    ReactionWindowExpired,
+    StaleReactionWindow,
+    ReactionAlreadyDone,
+    DuplicateCommand,
+    InvalidCommandId,
     InvalidAction
 }
 
@@ -93,8 +101,12 @@ public enum GameEventType
     AbilityWindowOpened,
     AbilityResolved,
     AbilityExpired,
+    ReactionWindowStarted,
     AlzheimerCalled,
     TurnEnded,
+    ReactionCardThrown,
+    IncorrectReactionThrow,
+    ReactionDone,
     ReactionWindowCompleted,
     RoundCompleted
 }
@@ -115,7 +127,8 @@ public sealed record PublicPlayerView(
     string PlayerId,
     string DisplayName,
     int HandCount,
-    int CumulativeScore);
+    int CumulativeScore,
+    int RoundPenaltyPoints);
 
 public sealed record PublicGameView(
     GamePhase Phase,
@@ -126,7 +139,11 @@ public sealed record PublicGameView(
     int DrawPileCount,
     IReadOnlyList<PublicPlayerView> Players,
     IReadOnlyList<CardView> DiscardPile,
-    QueenReactionTargetsView? QueenReactionTargets);
+    QueenReactionTargetsView? QueenReactionTargets,
+    long? ReactionWindowId,
+    DateTimeOffset? ReactionDeadlineUtc,
+    IReadOnlyList<string> ReactionDonePlayerIds,
+    IReadOnlyList<string> RequiredFinalTurnPlayerIds);
 
 public sealed record PlayerGameView(
     PublicGameView Public,

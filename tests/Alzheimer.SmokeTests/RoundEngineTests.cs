@@ -190,7 +190,7 @@ internal static class RoundEngineTests
         var callDuringReaction = engine.ProcessAction("P2", new CallAlzheimer());
         check(!callDuringReaction.Accepted && callDuringReaction.ErrorCode == GameErrorCode.InvalidPhase,
             "Alzheimer cannot be called during reaction resolution");
-        var advanced = engine.CompleteReactionWindow();
+        var advanced = CompleteByMarkingDone(engine);
         check(advanced.Accepted && engine.GetPublicView().ActivePlayerId == "P3",
             "authoritative reaction completion advances clockwise");
         check(engine.GetPublicView().Phase == GamePhase.AwaitingDraw, "next turn requires a new draw");
@@ -275,13 +275,13 @@ internal static class RoundEngineTests
             {
                 check(exhaustion.GetPublicView().Phase == GamePhase.AwaitingReactionResolution,
                     "last draw still opens its reaction-resolution phase");
-                check(exhaustion.CompleteReactionWindow().Accepted
+                check(CompleteByMarkingDone(exhaustion).Accepted
                     && exhaustion.GetPublicView().Phase == GamePhase.RoundCompleted,
                     "round completes only after the last draw reaction hook");
                 break;
             }
 
-            check(exhaustion.CompleteReactionWindow().Accepted,
+            check(CompleteByMarkingDone(exhaustion).Accepted,
                 $"depletion simulation reaction hook {turn + 1} advances");
             turn++;
         }
@@ -313,7 +313,7 @@ internal static class RoundEngineTests
         check(engine.ProcessAction("P1", new ReplaceHandCard(0)).Accepted,
             "two-player example host resolves by replacement");
         check(engine.ProcessAction("P1", new EndTurn()).Accepted, "two-player example host ends turn");
-        check(engine.CompleteReactionWindow().Accepted, "two-player example host phase completes");
+        check(CompleteByMarkingDone(engine).Accepted, "two-player example host phase completes");
 
         check(engine.GetPublicView().ActivePlayerId == "P2", "two-player example advances to guest");
         check(engine.ProcessAction("P2", new DrawCard()).Accepted, "two-player example guest draws");
@@ -321,7 +321,7 @@ internal static class RoundEngineTests
         check(engine.ProcessAction("P2", new DiscardDrawnCard()).Accepted,
             "two-player example guest resolves by discard");
         check(engine.ProcessAction("P2", new EndTurn()).Accepted, "two-player example guest ends turn");
-        check(engine.CompleteReactionWindow().Accepted, "two-player example guest phase completes");
+        check(CompleteByMarkingDone(engine).Accepted, "two-player example guest phase completes");
         check(engine.GetPublicView().ActivePlayerId == "P1", "two-player example returns clockwise to host");
     }
 
@@ -347,7 +347,7 @@ internal static class RoundEngineTests
 
             check(engine.ProcessAction(activePlayer, new EndTurn()).Accepted,
                 $"multi-turn simulation turn {turn + 1} reaches reaction phase");
-            check(engine.CompleteReactionWindow().Accepted,
+            check(CompleteByMarkingDone(engine).Accepted,
                 $"multi-turn simulation turn {turn + 1} completes authoritative reaction hook");
             AssertCardConservation(engine, check, $"multi-turn simulation turn {turn + 1}");
         }
@@ -395,6 +395,24 @@ internal static class RoundEngineTests
             if (!result.Accepted)
                 throw new InvalidOperationException($"Initial peek failed for {playerId}: {result.ErrorCode}.");
         }
+
+    }
+
+    private static TransitionResult CompleteByMarkingDone(AlzheimerRoundEngine engine)
+    {
+        var view = engine.GetPublicView();
+        var windowId = view.ReactionWindowId
+            ?? throw new InvalidOperationException("No reaction window is active.");
+        TransitionResult? result = null;
+        foreach (var player in view.Players)
+        {
+            result = engine.ProcessAction(
+                player.PlayerId,
+                new MarkReactionDone(windowId, Guid.NewGuid()));
+            if (!result.Accepted)
+                throw new InvalidOperationException($"Could not mark {player.PlayerId} done: {result.ErrorCode}.");
+        }
+        return result ?? throw new InvalidOperationException("No players participated in the reaction window.");
     }
 
     private static string Snapshot(AlzheimerRoundEngine engine, params string[] playerIds)

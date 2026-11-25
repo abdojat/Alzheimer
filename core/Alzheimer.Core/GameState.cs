@@ -17,6 +17,12 @@ internal sealed class RoundState
     public GamePhase Phase { get; set; }
     public string? CallerId { get; set; }
     public QueenReactionTargets? QueenReactionTargets { get; set; }
+    public long ReactionWindowSequence { get; set; }
+    public long? ReactionWindowId { get; set; }
+    public DateTimeOffset? ReactionDeadlineUtc { get; set; }
+    public HashSet<string> ReactionDonePlayerIds { get; } = new(StringComparer.Ordinal);
+    public Dictionary<string, HashSet<Guid>> ProcessedReactionCommandIds { get; } = new(StringComparer.Ordinal);
+    public IReadOnlyList<string> RequiredFinalTurnPlayerIds { get; set; } = Array.Empty<string>();
 }
 
 internal sealed class PlayerState(string playerId, string displayName)

@@ -77,6 +77,11 @@ public sealed class AlzheimerRoundEngine
     {
         var occurredAtUtc = _clock.UtcNow.ToUniversalTime();
         var timeoutEvents = ProcessAbilityExpiration(occurredAtUtc);
+        var reactionTimeoutEvents = ProcessReactionExpiration(occurredAtUtc);
+        timeoutEvents.AddRange(reactionTimeoutEvents);
+
+        if (reactionTimeoutEvents.Count != 0 && action is ThrowReactionCard or MarkReactionDone)
+            return Rejected(GameErrorCode.ReactionWindowExpired, occurredAtUtc, timeoutEvents);
 
         if (string.IsNullOrWhiteSpace(playerId) || !_playersById.ContainsKey(playerId))
             return Rejected(GameErrorCode.InvalidPlayer, occurredAtUtc, timeoutEvents);
@@ -102,6 +107,8 @@ public sealed class AlzheimerRoundEngine
                 occurredAtUtc),
             CallAlzheimer => Call(playerId, occurredAtUtc),
             EndTurn => End(playerId, occurredAtUtc),
+            ThrowReactionCard reaction => ThrowReaction(playerId, reaction, occurredAtUtc),
+            MarkReactionDone done => MarkDone(playerId, done, occurredAtUtc),
             _ => Rejected(GameErrorCode.InvalidAction, occurredAtUtc)
         };
 
@@ -114,9 +121,16 @@ public sealed class AlzheimerRoundEngine
     {
         var occurredAtUtc = _clock.UtcNow.ToUniversalTime();
         var events = ProcessAbilityExpiration(occurredAtUtc);
-        return events.Count == 0
-            ? Rejected(GameErrorCode.AbilityDeadlineNotReached, occurredAtUtc)
-            : Accepted(occurredAtUtc, events);
+        if (events.Count == 0)
+            events = ProcessReactionExpiration(occurredAtUtc);
+        if (events.Count != 0)
+            return Accepted(occurredAtUtc, events);
+
+        return Rejected(
+            _state.Round.Phase == GamePhase.AwaitingReactionResolution
+                ? GameErrorCode.ReactionDeadlineNotReached
+                : GameErrorCode.AbilityDeadlineNotReached,
+            occurredAtUtc);
     }
 
     public TransitionResult CompleteReactionWindow()
@@ -124,33 +138,10 @@ public sealed class AlzheimerRoundEngine
         var occurredAtUtc = _clock.UtcNow.ToUniversalTime();
         if (_state.Round.Phase != GamePhase.AwaitingReactionResolution)
             return Rejected(GameErrorCode.InvalidPhase, occurredAtUtc);
+        if (!IsReactionDeadlineReached(occurredAtUtc))
+            return Rejected(GameErrorCode.ReactionDeadlineNotReached, occurredAtUtc);
 
-        var round = _state.Round;
-        var events = new List<GameEvent>
-        {
-            new(GameEventType.ReactionWindowCompleted, round.Players[round.Turn.ActiveSeatIndex].PlayerId)
-        };
-
-        if (round.QueenReactionTargets is { } queenTargets)
-        {
-            round.DiscardPile.MakeTop(queenTargets.SelectedCard);
-            round.QueenReactionTargets = null;
-        }
-
-        if (round.DrawPile.Count == 0)
-        {
-            round.Phase = GamePhase.RoundCompleted;
-            events.Add(new GameEvent(GameEventType.RoundCompleted));
-        }
-        else
-        {
-            round.Turn.ActiveSeatIndex = (round.Turn.ActiveSeatIndex + 1) % round.Players.Count;
-            round.Phase = GamePhase.AwaitingDraw;
-            events.Add(new GameEvent(GameEventType.TurnStarted, round.Players[round.Turn.ActiveSeatIndex].PlayerId));
-        }
-
-        ValidateInvariants();
-        return Accepted(occurredAtUtc, events);
+        return Accepted(occurredAtUtc, CompleteReactionWindowCore());
     }
 
     public PublicGameView GetPublicView()
@@ -160,7 +151,8 @@ public sealed class AlzheimerRoundEngine
             player.PlayerId,
             player.DisplayName,
             player.Hand.Count,
-            _state.CumulativeScores[player.PlayerId])).ToArray();
+            _state.CumulativeScores[player.PlayerId],
+            player.UndrawnPenaltyPoints)).ToArray();
         var discardCards = round.DiscardPile.Cards.Select(ToCardView).ToArray();
 
         return new PublicGameView(
@@ -177,7 +169,14 @@ public sealed class AlzheimerRoundEngine
                     targets.Queen.Rank,
                     targets.SelectedCard.Rank,
                     ToCardView(targets.SelectedCard))
-                : null);
+                : null,
+            round.ReactionWindowId,
+            round.ReactionDeadlineUtc,
+            Array.AsReadOnly(round.Players
+                .Where(player => round.ReactionDonePlayerIds.Contains(player.PlayerId))
+                .Select(player => player.PlayerId)
+                .ToArray()),
+            Array.AsReadOnly(round.RequiredFinalTurnPlayerIds.ToArray()));
     }
 
     public PlayerGameView GetPlayerView(string playerId)
@@ -360,7 +359,10 @@ public sealed class AlzheimerRoundEngine
         {
             var isFirstCaller = round.CallerId is null;
             round.CallerId ??= playerId;
+            if (isFirstCaller)
+                RecordRequiredFinalTurns(round, playerId);
             round.QueenReactionTargets = null;
+            ClearReactionWindow(round);
             round.Phase = GamePhase.FinalPhase;
             if (isFirstCaller)
                 events.Add(new GameEvent(GameEventType.AlzheimerCalled, playerId));
@@ -486,6 +488,7 @@ public sealed class AlzheimerRoundEngine
             return Rejected(GameErrorCode.NotActivePlayer, occurredAtUtc);
 
         round.CallerId = playerId;
+        RecordRequiredFinalTurns(round, playerId);
         round.QueenReactionTargets = null;
         round.Phase = GamePhase.FinalPhase;
         ValidateInvariants();
@@ -500,9 +503,210 @@ public sealed class AlzheimerRoundEngine
         if (!IsActivePlayer(playerId))
             return Rejected(GameErrorCode.NotActivePlayer, occurredAtUtc);
 
+        round.ReactionWindowSequence++;
+        round.ReactionWindowId = round.ReactionWindowSequence;
+        round.ReactionDeadlineUtc = occurredAtUtc.AddSeconds(30);
+        round.ReactionDonePlayerIds.Clear();
+        round.ProcessedReactionCommandIds.Clear();
         round.Phase = GamePhase.AwaitingReactionResolution;
         ValidateInvariants();
-        return Accepted(occurredAtUtc, new[] { new GameEvent(GameEventType.TurnEnded, playerId) });
+        return Accepted(occurredAtUtc, new[]
+        {
+            new GameEvent(GameEventType.TurnEnded, playerId),
+            new GameEvent(GameEventType.ReactionWindowStarted, playerId)
+        });
+    }
+
+    private TransitionResult ThrowReaction(
+        string playerId,
+        ThrowReactionCard action,
+        DateTimeOffset occurredAtUtc)
+    {
+        var round = _state.Round;
+        var validationError = ValidateReactionCommand(
+            playerId,
+            action.ReactionWindowId,
+            action.CommandId,
+            occurredAtUtc);
+        if (validationError is not null)
+            return validationError;
+
+        var player = _playersById[playerId];
+        if (action.HandIndex < 0 || action.HandIndex >= player.Hand.Count)
+            return Rejected(GameErrorCode.InvalidHandIndex, occurredAtUtc);
+
+        var card = player.Hand[action.HandIndex].Card;
+        var discardTop = round.DiscardPile.Top;
+        if (discardTop is null)
+            return Rejected(GameErrorCode.InvalidPhase, occurredAtUtc);
+
+        var matches = round.QueenReactionTargets is { } queenTargets
+            ? ReactionRules.MatchesQueenWindow(card.Rank, queenTargets.SelectedCard.Rank)
+            : ReactionRules.MatchesTop(card.Rank, discardTop.Rank);
+
+        RememberReactionCommand(playerId, action.CommandId);
+        var events = new List<GameEvent>();
+        if (matches)
+        {
+            player.Hand.RemoveAt(action.HandIndex);
+            round.DiscardPile.Add(card);
+            events.Add(new GameEvent(GameEventType.ReactionCardThrown, playerId, action.HandIndex));
+
+            if (player.Hand.Count == 0 && round.CallerId is null)
+            {
+                round.CallerId = playerId;
+                RecordRequiredFinalTurns(round, playerId);
+                events.Add(new GameEvent(GameEventType.AlzheimerCalled, playerId));
+                events.Add(new GameEvent(GameEventType.ReactionWindowCompleted,
+                    round.Players[round.Turn.ActiveSeatIndex].PlayerId));
+                CloseReactionWindow(round, restoreQueenTop: true);
+                round.Phase = GamePhase.FinalPhase;
+            }
+        }
+        else
+        {
+            player.Hand[action.HandIndex].Knowledge = CardKnowledge.KnownToOwner;
+            if (round.DrawPile.Count == 0)
+            {
+                player.UndrawnPenaltyPoints += 10;
+            }
+            else
+            {
+                player.Hand.Add(new CardSlot(round.DrawPile.Draw(), CardKnowledge.Unknown));
+            }
+
+            events.Add(new GameEvent(GameEventType.IncorrectReactionThrow, playerId, action.HandIndex));
+        }
+
+        ValidateInvariants();
+        return Accepted(occurredAtUtc, events);
+    }
+
+    private TransitionResult MarkDone(
+        string playerId,
+        MarkReactionDone action,
+        DateTimeOffset occurredAtUtc)
+    {
+        var validationError = ValidateReactionCommand(
+            playerId,
+            action.ReactionWindowId,
+            action.CommandId,
+            occurredAtUtc);
+        if (validationError is not null)
+            return validationError;
+
+        RememberReactionCommand(playerId, action.CommandId);
+        var round = _state.Round;
+        round.ReactionDonePlayerIds.Add(playerId);
+        var events = new List<GameEvent> { new(GameEventType.ReactionDone, playerId) };
+        if (round.Players.All(player => round.ReactionDonePlayerIds.Contains(player.PlayerId)))
+            events.AddRange(CompleteReactionWindowCore());
+
+        ValidateInvariants();
+        return Accepted(occurredAtUtc, events);
+    }
+
+    private TransitionResult? ValidateReactionCommand(
+        string playerId,
+        long reactionWindowId,
+        Guid commandId,
+        DateTimeOffset occurredAtUtc)
+    {
+        var round = _state.Round;
+        if (round.Phase != GamePhase.AwaitingReactionResolution)
+            return Rejected(GameErrorCode.InvalidPhase, occurredAtUtc);
+        if (round.ReactionWindowId != reactionWindowId)
+            return Rejected(GameErrorCode.StaleReactionWindow, occurredAtUtc);
+        if (commandId == Guid.Empty)
+            return Rejected(GameErrorCode.InvalidCommandId, occurredAtUtc);
+        if (round.ProcessedReactionCommandIds.TryGetValue(playerId, out var commandIds)
+            && commandIds.Contains(commandId))
+            return Rejected(GameErrorCode.DuplicateCommand, occurredAtUtc);
+        if (round.ReactionDonePlayerIds.Contains(playerId))
+            return Rejected(GameErrorCode.ReactionAlreadyDone, occurredAtUtc);
+        return null;
+    }
+
+    private void RememberReactionCommand(string playerId, Guid commandId)
+    {
+        var round = _state.Round;
+        if (!round.ProcessedReactionCommandIds.TryGetValue(playerId, out var commandIds))
+        {
+            commandIds = new HashSet<Guid>();
+            round.ProcessedReactionCommandIds.Add(playerId, commandIds);
+        }
+        commandIds.Add(commandId);
+    }
+
+    private List<GameEvent> ProcessReactionExpiration(DateTimeOffset occurredAtUtc)
+    {
+        var round = _state.Round;
+        if (round.Phase != GamePhase.AwaitingReactionResolution
+            || !IsReactionDeadlineReached(occurredAtUtc))
+            return new List<GameEvent>();
+
+        return CompleteReactionWindowCore();
+    }
+
+    private bool IsReactionDeadlineReached(DateTimeOffset occurredAtUtc) =>
+        _state.Round.ReactionDeadlineUtc is { } deadline && occurredAtUtc >= deadline;
+
+    private List<GameEvent> CompleteReactionWindowCore()
+    {
+        var round = _state.Round;
+        var activePlayerId = round.Players[round.Turn.ActiveSeatIndex].PlayerId;
+        var events = new List<GameEvent>
+        {
+            new(GameEventType.ReactionWindowCompleted, activePlayerId)
+        };
+
+        CloseReactionWindow(round, restoreQueenTop: true);
+        if (round.DrawPile.Count == 0)
+        {
+            round.Phase = GamePhase.RoundCompleted;
+            events.Add(new GameEvent(GameEventType.RoundCompleted));
+        }
+        else
+        {
+            round.Turn.ActiveSeatIndex = (round.Turn.ActiveSeatIndex + 1) % round.Players.Count;
+            round.Phase = GamePhase.AwaitingDraw;
+            events.Add(new GameEvent(GameEventType.TurnStarted, round.Players[round.Turn.ActiveSeatIndex].PlayerId));
+        }
+
+        ValidateInvariants();
+        return events;
+    }
+
+    private static void CloseReactionWindow(RoundState round, bool restoreQueenTop)
+    {
+        if (restoreQueenTop && round.QueenReactionTargets is { } queenTargets)
+            round.DiscardPile.MakeTop(queenTargets.SelectedCard);
+
+        round.QueenReactionTargets = null;
+        round.ReactionWindowId = null;
+        round.ReactionDeadlineUtc = null;
+        round.ReactionDonePlayerIds.Clear();
+        round.ProcessedReactionCommandIds.Clear();
+    }
+
+    private static void ClearReactionWindow(RoundState round)
+    {
+        round.ReactionWindowId = null;
+        round.ReactionDeadlineUtc = null;
+        round.ReactionDonePlayerIds.Clear();
+        round.ProcessedReactionCommandIds.Clear();
+    }
+
+    private static void RecordRequiredFinalTurns(RoundState round, string callerId)
+    {
+        var finalTurns = new List<string>(round.Players.Count - 1);
+        for (var offset = 1; offset <= round.Players.Count; offset++)
+        {
+            var playerId = round.Players[(round.Turn.ActiveSeatIndex + offset) % round.Players.Count].PlayerId;
+            if (!string.Equals(playerId, callerId, StringComparison.Ordinal))
+                finalTurns.Add(playerId);
+        }
+        round.RequiredFinalTurnPlayerIds = Array.AsReadOnly(finalTurns.ToArray());
     }
 
     private bool IsActivePlayer(string playerId) =>
@@ -538,6 +742,21 @@ public sealed class AlzheimerRoundEngine
             || (!abilityPhase
                 && (round.Turn.PendingAbility is not null || round.Turn.AbilityDeadlineUtc is not null)))
             throw new InvalidOperationException("The round state violated ability-window invariants.");
+        var reactionPhase = round.Phase == GamePhase.AwaitingReactionResolution;
+        if (reactionPhase != (round.ReactionWindowId is not null && round.ReactionDeadlineUtc is not null)
+            || (!reactionPhase
+                && (round.ReactionWindowId is not null
+                    || round.ReactionDeadlineUtc is not null
+                    || round.ReactionDonePlayerIds.Count != 0
+                    || round.ProcessedReactionCommandIds.Count != 0)))
+            throw new InvalidOperationException("The round state violated reaction-window invariants.");
+        if (round.ReactionDonePlayerIds.Any(playerId => !_playersById.ContainsKey(playerId))
+            || round.RequiredFinalTurnPlayerIds.Distinct(StringComparer.Ordinal).Count()
+                != round.RequiredFinalTurnPlayerIds.Count
+            || round.RequiredFinalTurnPlayerIds.Any(playerId =>
+                !_playersById.ContainsKey(playerId)
+                || string.Equals(playerId, round.CallerId, StringComparison.Ordinal)))
+            throw new InvalidOperationException("The round state violated reaction or final-turn identity invariants.");
     }
 
     private static CardView ToCardView(PlayingCard card) =>
