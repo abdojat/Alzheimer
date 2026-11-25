@@ -51,6 +51,6 @@ This file applies to the **entire repository**. Read it before changing code. Do
 - Use serialized per-room action processing / locking; define server-authoritative UTC deadlines and atomic invalid-throw penalties. Never trust client-supplied card values, scores or clocks.
 - Treat room passwords, player names, reconnect tokens and eventual authentication as untrusted inputs. Keep guest lobby features clearly distinguished from production security.
 
-## Immediate priority
+## Unity P0 verification status
 
-See `docs/DEVELOPMENT_ROADMAP.md`. **P0: fix Unity input handling and scene navigation, then verify a local Android build.** The current checked-in `SceneBootstrap.cs` uses `StandaloneInputModule`; the current package manifest lacks `com.unity.inputsystem`. Inspect the checked-in Player setting before choosing a consistent input configuration. Do not switch to a new input backend without installing/configuring its package and UI module. Verify transitions `MainMenu -> GameTable -> MainMenu` and no duplicate canvas/EventSystem.
+The owner reports that an Android build was successfully installed and launched on a physical phone. This confirmation is distinct from Unity automated test results, which remain unverified; do not claim automated scene-navigation, touch-input, or Unity test validation passed unless it is run. See `docs/DEVELOPMENT_ROADMAP.md` for the remaining P0 checks and evidence.

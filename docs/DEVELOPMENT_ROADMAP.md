@@ -11,7 +11,7 @@
 - [ ] Complete playable local game engine (not implemented).
 - [ ] Connected Unity online lobby/client (not implemented).
 - [ ] Authoritative multiplayer gameplay (not implemented).
-- [ ] Successful APK built and installed on a physical device (not verified in repository inspection).
+- [x] Owner-confirmed Android build installed and launched on a physical phone (reported 2026-11-25; not independently reproduced in this work session).
 
 ## P0 — stabilize the Unity prototype
 
@@ -19,10 +19,10 @@
 2. [x] Declared `com.unity.inputsystem` 1.14.2, referenced its assembly, retained `activeInputHandler: 1`, and configure `InputSystemUIInputModule` for mouse and touch through the default UI actions.
 3. [x] Replaced runtime `DestroyImmediate()` calls with lifecycle-safe `Destroy()` or object reuse/deactivation. The bootstrap reconciles one EventSystem, one runtime UI canvas, and one set of persistent managers.
 4. [x] Added static-state and `sceneLoaded` reset handling for Enter/Exit Play Mode and disabled domain reload. Added repeated-transition Play Mode tests.
-5. [ ] Repeated scene-transition runtime execution, Editor compilation, 9:16/touch validation, and automated Unity tests remain blocked. Unity resolves a Personal entitlement. Script compilation exposed `com.unity.inputsystem@1.14.2` as incompatible with Unity `6000.6.10f1` APIs (CS0619 obsolete-API errors). The manifest has been updated to the 6000.6-compatible `1.20.1`; a bounded re-run restored the stale lock/cache state and did not execute tests, so package-lock restoration and test execution remain manual/Editor validation work.
-6. [ ] Development Android APK generation remains blocked by the licensing problem.
+5. [ ] Repeated scene-transition runtime execution, Editor compilation, 9:16/touch validation, and automated Unity tests remain unverified. Earlier Unity test attempts were blocked by entitlement and package/cache issues; do not treat those attempts as passing.
+6. [x] The owner reports that an Android APK was built, installed, and launched on a physical phone. This agent has not independently repeated the build or device test.
 
-**P0 acceptance:** P0 is **blocked**, not completed. The Unity source/configuration and lifecycle test implementation are prepared, but Unity compilation, repeated runtime navigation, mouse/touch input, and APK generation have no passing runtime evidence. Existing .NET smoke tests and server build must be verified in the final validation pass. No fake online buttons or gameplay completion are included.
+**P0 acceptance:** Android build/install/launch has owner-reported physical-device confirmation. Unity automated tests, repeated navigation, and touch-input checks remain unverified; this distinction must be preserved in status reports. P1 core work can proceed. No fake online buttons or gameplay completion are implied.
 
 ## P1 — deterministic server-authoritative round engine
 

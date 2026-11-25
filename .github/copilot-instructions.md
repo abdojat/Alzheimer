@@ -11,5 +11,5 @@ Before any change, read `AGENTS.md`, `docs/Alzheimer_Card_Game_Rules_v1.1.md` fo
 - Do not fabricate a Unity build pass, Android APK, SignalR integration, or gameplay completion.
 - Prefer minimal, dependency-conscious changes. Protect Unity `.meta` files, asset references, project settings, and scenes.
 - Follow the scoped guidance in `.github/instructions/` for Unity vs server/rules code.
-- First address the current Unity input/scene transition issues described in `docs/DEVELOPMENT_ROADMAP.md`; don't add unrelated features until the prototype reliably navigates and takes touch input.
+- The owner reports a successful Android build/install/launch on a physical phone. This is not evidence that Unity automated tests, repeated scene navigation, or touch-input validation passed; check `docs/DEVELOPMENT_ROADMAP.md` and report those separately.
 - Update documentation and checklists as milestones are verified. Keep the canonical rulebook under source control.

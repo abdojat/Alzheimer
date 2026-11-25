@@ -14,6 +14,11 @@ Recordings/
 *.unitypackage
 *.csproj.user
 *.slnx.user
+/client/Alzheimer.Client/.utmp/
+/client/Alzheimer.Client/*.csproj
+/client/Alzheimer.Client/*.sln
+/client/Alzheimer.Client/*.slnx
+/client/Alzheimer.Client/*.log
 # .NET / IDE
 **/bin/
 **/obj/
