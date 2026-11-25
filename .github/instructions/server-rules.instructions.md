@@ -3,7 +3,7 @@ applyTo: "core/**,server/**,tests/**"
 ---
 # Server and rules engine instructions
 
-Authoritative source: `docs/Alzheimer_Card_Game_Rules_v1.1.md`. Treat current `DeckFactory`, `PlayingCard`, `ReactionRules`, `RoundScorer`, and `RoomSettings` as utilities, **not** a complete gameplay implementation. `LobbyHub` and `LobbyStore` implement rooms only.
+Authoritative source: `docs/Alzheimer_Card_Game_Rules_v1.1.md`. `DeckFactory`, `PlayingCard`, `ReactionRules`, `RoundScorer`, and `RoomSettings` are rules utilities. `AlzheimerRoundEngine` provides the P1 round foundation (initial deal/peeks, mandatory draw, discard/replace, post-resolution call/end decision, and private views), but it is **not** a complete gameplay implementation. `LobbyHub` and `LobbyStore` implement rooms only.
 
 ## Design the next vertical slice as pure, testable C#
 

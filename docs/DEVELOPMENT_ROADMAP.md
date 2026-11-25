@@ -1,14 +1,14 @@
 # Alzheimer — implementation roadmap and verified status
 
-**Audit baseline:** repository `abdojat/Alzheimer`, `main` at commit `63a1b11e7b5397bdde678c566c2a28970badb2b0` (audited 2026-11-24). P0 implementation status is updated below after direct workspace validation.
+**Status updated:** 2026-11-25 on `feat/p1-core-game-engine`. P0 device smoke-test status is owner-reported; P1 checks below reflect commands run for this change.
 
 ## Already present (by code inspection)
 
 - [x] Pure C# primitives: cards, 1–4 shuffled decks, player-count settings, rank/Queen-window matching, scoring rules.
-- [x] Executable console smoke test program with 17 rule checks (re-run and passed 2026-11-24).
+- [x] Executable console smoke test program with 18 original utility checks (re-run with P1 scenarios on 2026-11-25).
 - [x] ASP.NET Core 10 SignalR room create/join/leave and in-memory lobby state.
 - [x] Unity 6 Android project with MainMenu/GameTable scene files, runtime-generated uGUI preview, Android build scripts, URP 2D assets.
-- [ ] Complete playable local game engine (not implemented).
+- [x] P1 deterministic pure-C# round engine for initial peeks, ordinary draw resolution, post-resolution decision and privacy-safe projections (see P2 for remaining gameplay).
 - [ ] Connected Unity online lobby/client (not implemented).
 - [ ] Authoritative multiplayer gameplay (not implemented).
 - [x] Owner-confirmed Android build installed and launched on a physical phone (reported 2026-11-25; not independently reproduced in this work session).
@@ -16,7 +16,7 @@
 ## P0 — stabilize the Unity prototype
 
 1. [x] Inspected Unity project version (`6000.6.10f1`), input settings, package manifest, scene bootstrap and scene generator.
-2. [x] Declared `com.unity.inputsystem` 1.14.2, referenced its assembly, retained `activeInputHandler: 1`, and configure `InputSystemUIInputModule` for mouse and touch through the default UI actions.
+2. [x] Declared `com.unity.inputsystem` 1.20.1, referenced its assembly, retained `activeInputHandler: 1`, and configured `InputSystemUIInputModule` for mouse and touch through the default UI actions.
 3. [x] Replaced runtime `DestroyImmediate()` calls with lifecycle-safe `Destroy()` or object reuse/deactivation. The bootstrap reconciles one EventSystem, one runtime UI canvas, and one set of persistent managers.
 4. [x] Added static-state and `sceneLoaded` reset handling for Enter/Exit Play Mode and disabled domain reload. Added repeated-transition Play Mode tests.
 5. [ ] Repeated scene-transition runtime execution, Editor compilation, 9:16/touch validation, and automated Unity tests remain unverified. Earlier Unity test attempts were blocked by entitlement and package/cache issues; do not treat those attempts as passing.
@@ -26,13 +26,24 @@
 
 ## P1 — deterministic server-authoritative round engine
 
-1. Add explicit round state, phase enum, ordered players, deck/discard and private knowledge, caller and score ledgers to pure `core`.
-2. Introduce server-validated commands for dealing, initial peek, mandatory draw, keep/replace/discard, and legal/illegal phase transitions.
-3. Unit tests for draw/resolve/call timing, knowledge and hand-size changes; fake clock and seeded RNG.
+1. [x] Add explicit internal match/round/player/turn state, phases, ordered seats, unique physical IDs, per-slot private knowledge, caller and cumulative-score ledger to pure `core`.
+2. [x] Implement deterministic round setup, four-card deal, exactly two owner-only peeks, mandatory draw, discard/replace, post-resolution call/end decision, and invalid-action rejection.
+3. [x] Provide public and per-player projections; keep hidden identities out of public DTOs and transition events.
+4. [x] Inject seeded randomness, physical ID generation, and a UTC clock; add deterministic multi-turn, privacy, rejection, card conservation, configuration, call timing and last-draw tests to the no-dependency smoke runner.
+5. [x] Validate with the P1 commands listed below; retain the existing .NET smoke checks.
 
-**P1 acceptance:** deterministic 2–10-player simulation can deal, draw and resolve a turn without Unity and without leaking hidden card data; comprehensive tests pass.
+**P1 acceptance:** met for the implemented slice. Rounds can be deterministically initialized for 2–10 players and 1–4 decks, and ordinary turns can be drawn/resolved without Unity while private projections keep hidden identities private. P1 does not constitute a complete or playable match.
 
-## P2 — all abilities and reaction/final phase
+### P1 API and operational boundary
+
+- Each authoritative room will create one `AlzheimerRoundEngine` and submit trusted player IDs with `ProcessAction`. Client-supplied ranks, scores, identities, or timestamps are not accepted as commands.
+- Project `GetPublicView()` to all room members and `GetPlayerView(playerId)` only to that player. Never serialize or broadcast internal state.
+- The engine runs synchronous transitions but does not synchronize concurrent access. The server must serialize each room's commands through a per-room lock, actor, or queue before accepting multiplayer actions.
+- `CompleteReactionWindow()` is a trusted engine-authoritative P1 simulation hook only. P2 must replace its use in a production room with server-owned deadline and reaction processing; clients cannot decide that a phase has expired.
+- `IGameClock` supplies transition timestamps. P2 will use an injectable/server clock for authoritative deadlines; P1 does not start timers.
+- P3 will connect room creation/lifecycle to match lifecycle. P1 does not change `LobbyHub` or create a live network game.
+
+## P2 — abilities, reactions, and round completion
 
 1. Jack/Queen/King ability resolution and 30s timeouts.
 2. 30s simultaneous reaction windows, irreversible Done, rank-only matches, special Queen dual-target behavior.
@@ -68,3 +79,10 @@
 ## Update policy
 
 When completing a milestone, link its commit/PR, add the validation command/results and keep unchecked items unchecked until verified. Rules remain authoritative in `docs/Alzheimer_Card_Game_Rules_v1.1.md` unless the owner explicitly approves a new version.
+
+### P1 validation run (2026-11-25)
+
+- `dotnet run --project tests/Alzheimer.SmokeTests` — passed; 666 assertions, including the original utility checks and deterministic P1 scenarios.
+- `dotnet build core/Alzheimer.Core` — passed.
+- `dotnet build server/Alzheimer.Server` — passed.
+- Unity Editor tests and Android build were not run for this core-only change. The Android install/launch result above is owner-reported, not independently re-tested here.

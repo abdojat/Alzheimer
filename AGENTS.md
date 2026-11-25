@@ -11,7 +11,7 @@ This file applies to the **entire repository**. Read it before changing code. Do
 
 ## Repository map
 
-- `core/Alzheimer.Core/`: pure .NET 10 rules utilities (deck, card values, reaction matching, scoring, settings). Not a full round engine.
+- `core/Alzheimer.Core/`: pure .NET 10 utilities and the P1 deterministic round foundation (deal, private peeks, ordinary turns and projections). It is not a full playable round engine.
 - `server/Alzheimer.Server/`: ASP.NET Core 10 / SignalR **lobby only**; in-memory rooms; no live gameplay, private card delivery or turn management yet.
 - `tests/Alzheimer.SmokeTests/`: executable basic checks. Existing tests do **not** prove gameplay is finished.
 - `client/Alzheimer.Client/`: Unity 6 editor project for an Android portrait client, uGUI prototype and Android build script.

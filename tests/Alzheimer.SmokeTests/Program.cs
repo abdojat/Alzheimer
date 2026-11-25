@@ -31,4 +31,7 @@ var depletion = RoundScorer.Calculate(new[] { new PlayerRoundBase("A", 3, 10), n
 Check(depletion["A"] == 26 && depletion["B"] == 16, "undrawn penalty before doubling");
 Check(RoundScorer.IsMatchOver(new[] { 44, 100, 81 }), "score reaching 100 ends match");
 Check(!RoundScorer.IsMatchOver(new[] { 44, 99, 81 }), "below 100 does not end match");
+
+RoundEngineTests.Run(Check);
+
 Console.WriteLine("All smoke tests passed.");
