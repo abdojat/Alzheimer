@@ -162,4 +162,4 @@ The current implementation status and P1/P2 acceptance boundaries are tracked in
 - Use a per-room lock/serialized action queue for simultaneous throws. No player has priority by game rule, but the server must decide an order deterministically.
 - Server-side absolute UTC deadlines govern ability/reaction timers; clients only display them.
 - Persist a match state transition/event log before adding real-money or ranked play. Do not rely on Unity physics/network sync for this card game.
-- Confirm all special edge cases against `docs/Alzheimer_Card_Game_Rules_v1.1.md`; this starter deliberately implements only basic core utilities and lobby functions.
+- Confirm all special edge cases against `docs/Alzheimer_Card_Game_Rules_v1.1.md`. The repository includes the P1 deterministic round foundation, but the server is still lobby-only and P2 gameplay mechanics remain unimplemented.

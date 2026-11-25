@@ -1,6 +1,6 @@
 # Alzheimer — implementation roadmap and verified status
 
-**Status updated:** 2026-11-25 on `feat/p1-core-game-engine`. P0 device smoke-test status is owner-reported; P1 checks below reflect commands run for this change.
+**Status updated:** 2026-11-25 on `feat/p1-core-engine`. P0 device smoke-test status is owner-reported; P1 checks below reflect commands run for this change.
 
 ## Already present (by code inspection)
 
