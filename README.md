@@ -22,9 +22,9 @@ From the repository root:
 dotnet run --project tests/Alzheimer.SmokeTests
 ```
 
-You should see `All smoke tests passed.` The tests cover deck and player configurations, deterministic setup and IDs, private peeks, mandatory draw, discard/replace, call timing, special-ability resolution and timeouts, rejection atomicity, privacy-safe projections, turn order, card conservation, and existing card/scoring utilities.
+You should see `All smoke tests passed.` The tests cover deck and player configurations, deterministic setup and IDs, private peeks, mandatory draw, discard/replace, call timing, special-ability resolution and timeouts, rank-only reaction chains, persistent Queen matching, Done/deadlines, wrong-throw penalties, automatic calls, rejection atomicity, privacy-safe projections, turn order, card conservation, and existing card/scoring utilities.
 
-## P1/P2A round engine API
+## P1/P2B round engine API
 
 `AlzheimerRoundEngine.StartNewRound(...)` creates a round in `WaitingForInitialPeeks`. Supply the clockwise player list, host ID, `RoomSettings`, an optional seeded `Random`, optional physical-card-ID factory, and optional `IGameClock`. The engine rotates the supplied clockwise order so the host is first, deals four unknown cards to each player, and keeps the remaining cards in its private draw pile.
 
@@ -72,7 +72,9 @@ if (hostDraw is null)
     throw new InvalidOperationException("The host did not receive a private draw.");
 Apply("host", new ReplaceHandCard(0));
 Apply("host", new EndTurn());
-engine.CompleteReactionWindow();
+var hostReactionWindow = engine.GetPublicView().ReactionWindowId!.Value;
+Apply("host", new MarkReactionDone(hostReactionWindow, Guid.NewGuid()));
+Apply("guest", new MarkReactionDone(hostReactionWindow, Guid.NewGuid()));
 
 Apply("guest", new DrawCard());
 var guestDraw = engine.GetPlayerView("guest").PendingDrawnCard;
@@ -80,12 +82,16 @@ if (guestDraw is null)
     throw new InvalidOperationException("The guest did not receive a private draw.");
 Apply("guest", new DiscardDrawnCard());
 Apply("guest", new EndTurn());
-engine.CompleteReactionWindow();
+var guestReactionWindow = engine.GetPublicView().ReactionWindowId!.Value;
+Apply("host", new MarkReactionDone(guestReactionWindow, Guid.NewGuid()));
+Apply("guest", new MarkReactionDone(guestReactionWindow, Guid.NewGuid()));
 ```
 
-`CompleteReactionWindow()` remains a trusted progression hook for deterministic simulation; P2A does not implement reaction throws, Done states, invalid-throw penalties, or a reaction timer. In production, the server must call it only after serialized reaction processing. The engine is not thread-safe: a future per-room server actor/queue or lock must serialize commands. The engine does not expose mutable state, and the server should send only the appropriate public or per-player projection.
+`EndTurn` opens a 30-second reaction window using the injected authoritative UTC clock. `PublicGameView` exposes the window ID, deadline, and Done players; all players may submit `ThrowReactionCard(handIndex, reactionWindowId, commandId)` repeatedly, or mark themselves Done once with `MarkReactionDone(reactionWindowId, commandId)`. A unique command ID prevents replay, and the window ID rejects stale submissions. Throws use server-owned card ranks, match rank only against the ordinary current top, and never activate abilities. A wrong attempt leaves that card in place, privately reveals it to its owner, and immediately adds an unknown penalty card, or records +10 round-penalty points when the draw pile is empty.
 
-P2A implements J/Q/K abilities and their 30-second windows. P2B reaction gameplay and P2C final-turn accounting, scoring, match completion, and round reset are not complete. The server remains lobby-only; these engine APIs are not wired to live SignalR gameplay.
+Queen's two matching ranks persist for the full reaction window, and its selected card is restored to the pile top when the window closes. A successful throw that empties a hand records the automatic caller, closes reactions immediately, and preserves the active seat plus the required subsequent-turn order for P2C; Queen-empty-hand calls still cancel the upcoming window. `CompleteReactionWindow()` is a trusted progression hook that refuses to close an early window; the engine also processes due deadlines through `ProcessTimeouts()` and before accepting actions. The engine is synchronous, not thread-safe: production server code must serialize per-room commands and call timeouts from server-owned scheduling. These APIs are not wired to SignalR, and no transport, persistence, or Unity gameplay is included.
+
+P2B implements J/Q/K abilities and reactions. P2C final-turn execution, draw-exhaustion round accounting, scoring/doubling, cumulative match completion, and round reset remain unimplemented; `RequiredFinalTurnPlayerIds` and per-player `RoundPenaltyPoints` preserve state needed for that work. The server remains lobby-only.
 
 ## GitHub Actions CI
 
@@ -166,7 +172,7 @@ Alzheimer/
 
 ## Roadmap
 
-The current implementation status and P1/P2A/P2B/P2C acceptance boundaries are tracked in [docs/DEVELOPMENT_ROADMAP.md](docs/DEVELOPMENT_ROADMAP.md). P1 provides deterministic ordinary turns; P2A adds abilities, while P2B reactions and P2C final-turn accounting and scoring remain outstanding. Unity connectivity and production concerns follow in P3/P4.
+The current implementation status and P1/P2A/P2B/P2C acceptance boundaries are tracked in [docs/DEVELOPMENT_ROADMAP.md](docs/DEVELOPMENT_ROADMAP.md). P1 provides deterministic ordinary turns; P2A adds abilities; P2B adds deterministic reactions. P2C final-turn execution, scoring, and match completion remain outstanding. Unity connectivity and production concerns follow in P3/P4.
 
 ## Key implementation rules
 
@@ -174,6 +180,6 @@ The current implementation status and P1/P2A/P2B/P2C acceptance boundaries are t
 - Track **knowledge per player/card-position**, not just a `faceUp` Boolean. A card replacing a hand card is face down even when its owner knows what it is. Receiving a card via King makes it unknown.
 - Assign a stable ID to every physical card so 4 decks can have identical rank/suit copies.
 - Use a per-room lock/serialized action queue for simultaneous throws. No player has priority by game rule, but the server must decide an order deterministically.
-- Server-side absolute UTC deadlines govern ability/reaction timers; clients only display them. P2A enforces ability deadlines in the core engine; P2B reaction deadlines remain to be implemented.
+- Server-side absolute UTC deadlines govern ability/reaction timers; clients only display them. The core engine enforces both P2A ability and P2B reaction deadlines.
 - Persist a match state transition/event log before adding real-money or ranked play. Do not rely on Unity physics/network sync for this card game.
-- Confirm all special edge cases against `docs/Alzheimer_Card_Game_Rules_v1.1.md`. The repository includes the P1 round foundation and P2A abilities, but the server is still lobby-only and P2B reactions/P2C scoring remain unimplemented.
+- Confirm all special edge cases against `docs/Alzheimer_Card_Game_Rules_v1.1.md`. The repository includes P1 round foundations, P2A abilities and P2B reactions, but the server is still lobby-only and P2C scoring remains unimplemented.

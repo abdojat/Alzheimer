@@ -3,15 +3,16 @@ applyTo: "core/**,server/**,tests/**"
 ---
 # Server and rules engine instructions
 
-Authoritative source: `docs/Alzheimer_Card_Game_Rules_v1.1.md`. `DeckFactory`, `PlayingCard`, `ReactionRules`, `RoundScorer`, and `RoomSettings` are rules utilities. `AlzheimerRoundEngine` provides P1 round setup/ordinary turns and P2A Jack/Queen/King abilities with injected-clock 30-second ability deadlines. P2B reactions and P2C final-turn/scoring/match completion are not implemented. `LobbyHub` and `LobbyStore` implement rooms only.
+Authoritative source: `docs/Alzheimer_Card_Game_Rules_v1.1.md`. `DeckFactory`, `PlayingCard`, `ReactionRules`, `RoundScorer`, and `RoomSettings` are rules utilities. `AlzheimerRoundEngine` provides P1 round setup/ordinary turns, P2A Jack/Queen/King abilities, and P2B reaction commands with injected-clock 30-second deadlines. P2C final-turn execution/scoring/match completion are not implemented. `LobbyHub` and `LobbyStore` implement rooms only.
 
 ## Design the next vertical slice as pure, testable C#
 
 - In `core`, define immutable/controlled state for deck/discard, per-player ordered hand and knowledge, turn order, phases, active player, one caller, per-round penalties, cumulative scores and deadlines.
 - Explicit transitions: `Deal -> InitialPeek -> MandatoryDraw -> ResolveDraw (Keep/Discard/Ability) -> PostResolutionCallOrEnd -> ReactionWindow -> NextTurn -> FinalPhase -> Score -> NewRound/MatchEnd`.
-- Ability windows (Jack, Queen, King) and reaction windows are distinct 30-second deadlines. P2A `ProcessTimeouts()` uses the injected UTC clock and discards an incomplete ability without effect; never accept a client-supplied deadline. P2B reaction timing remains to be implemented.
+- Ability windows (Jack, Queen, King) and reaction windows are distinct 30-second deadlines. `ProcessTimeouts()` uses the injected UTC clock to expire due abilities and reactions; never accept a client-supplied deadline. `ThrowReactionCard` and `MarkReactionDone` carry the active reaction-window ID and a unique command ID.
 - Host always leads; clockwise turns. No player-count-4 assumption; hands vary in size. Deck count 1–4; stable unique physical-card identifiers.
 - Preserve rules for knowledge: newly kept card is face down; owner saw it; a King swap is blind and received card is unknown. Invalid throw makes attempted card known and adds one unknown penalty card, or +10 if pile exhausted.
+- P2B validates reactions using server-owned ranks, retains private knowledge, keeps Queen's two ranks valid throughout its window, and records the required subsequent-turn order when a reaction empties a hand.
 - Ordinary reactions match current **top rank only**. Queen two-rank exception lasts for whole window; the Queen ability's discarded card is the top after window ends. Done players cannot resume. A successful reaction can empty a hand and auto-call.
 - Voluntary Alzheimer only at post-resolution prompt before reaction; one caller only. Empty-hand automatic calls may occur outside a player's turn and require full remaining-turn bookkeeping. Last-card and penalty depletion need precise end timing.
 - Round-score doubling and cumulative score >=100 rules must be tested, including penalties before doubling and ties.
@@ -21,6 +22,7 @@ Authoritative source: `docs/Alzheimer_Card_Game_Rules_v1.1.md`. `DeckFactory`, `
 
 - Keep connection IDs separate from stable player/seat identities. Current lobby is in memory and not reconnect-safe; mark this limitation until fixed.
 - Serialize actions per room to avoid races across multiple simultaneous reaction throws. No gameplay rule favors a particular player, but server must settle each attempted action consistently.
+- The engine is synchronous and not thread-safe. `CompleteReactionWindow()` must not bypass the reaction deadline; all players marking Done closes the window immediately.
 - Validate phase, identity, ownership, card index/ID, deadline and game constraints server-side before committing an action.
 - Never broadcast the full game state, private card ranks or private knowledge. Project public state per room and private views to each player.
 - Use structured events/snapshots rather than exposing internal mutable object references. Guard against duplicate submissions and stale-turn actions.
