@@ -1,0 +1,5 @@
+D:/Users/abdal/Desktop/Alzheimer/client/Alzheimer.Client/.utmp/Debug/712q2s6u/arm64-v8a/CMakeFiles/edit_cache.dir
+D:/Users/abdal/Desktop/Alzheimer/client/Alzheimer.Client/.utmp/Debug/712q2s6u/arm64-v8a/CMakeFiles/rebuild_cache.dir
+D:/Users/abdal/Desktop/Alzheimer/client/Alzheimer.Client/.utmp/Debug/712q2s6u/arm64-v8a/FramePacing/CMakeFiles/swappywrapper.dir
+D:/Users/abdal/Desktop/Alzheimer/client/Alzheimer.Client/.utmp/Debug/712q2s6u/arm64-v8a/FramePacing/CMakeFiles/edit_cache.dir
+D:/Users/abdal/Desktop/Alzheimer/client/Alzheimer.Client/.utmp/Debug/712q2s6u/arm64-v8a/FramePacing/CMakeFiles/rebuild_cache.dir

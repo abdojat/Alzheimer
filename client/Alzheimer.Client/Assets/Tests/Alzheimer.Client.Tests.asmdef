@@ -3,9 +3,10 @@
   "rootNamespace": "Alzheimer.Client.Tests",
   "references": [
     "Alzheimer.Client",
-    "Unity.InputSystem",
-    "UnityEngine.TestRunner",
-    "UnityEditor.TestRunner"
+    "Unity.InputSystem"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
