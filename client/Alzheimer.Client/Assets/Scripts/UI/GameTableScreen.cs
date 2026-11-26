@@ -88,7 +88,7 @@ namespace Alzheimer.Client.UI
 
             CreateButton(panel.transform, "Leave", "BACK / LEAVE", 34, new Vector2(0.5f, 0.03f), LeaveTable);
 
-            _network = Object.FindAnyObjectByType<NetworkManager>();
+            _network = UnityEngine.Object.FindAnyObjectByType<NetworkManager>();
             if (_network != null)
             {
                 UnsubscribeNetworkEvents();

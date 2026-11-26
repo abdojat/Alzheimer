@@ -31,16 +31,23 @@ if (-not $UnityExe -or -not (Test-Path $UnityExe)) {
 New-Item -ItemType Directory -Path (Split-Path -Parent $output) -Force | Out-Null
 $log = Join-Path $project "build-android.log"
 
-& $UnityExe `
-    -batchmode `
-    -nographics `
-    -quit `
-    -projectPath $project `
-    -executeMethod Alzheimer.Client.Editor.BuildAndroid.Build `
-    -output $output `
-    -logFile $log
+$unityArguments = @(
+    "-batchmode",
+    "-nographics",
+    "-quit",
+    "-projectPath", $project,
+    "-executeMethod", "Alzheimer.Client.Editor.BuildAndroid.Build",
+    "-output", $output,
+    "-logFile", $log
+)
+$unityProcess = Start-Process `
+    -FilePath $UnityExe `
+    -ArgumentList $unityArguments `
+    -PassThru `
+    -Wait `
+    -WindowStyle Hidden
 
-if ($LASTEXITCODE -ne 0) {
+if ($unityProcess.ExitCode -ne 0) {
     throw "Unity build failed. See $log"
 }
 if (-not (Test-Path $output)) {

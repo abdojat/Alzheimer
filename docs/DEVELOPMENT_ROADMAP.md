@@ -1,6 +1,6 @@
 # Alzheimer — implementation roadmap and verified status
 
-**Status updated:** 2026-11-26 on `feat/p3b-unity-online-client`. P0 device smoke-test status is owner-reported; P1/P2A/P2B/P2C and P3A validation reflects commands run for those milestones. P3B-1 source work is present but its Unity/Android/two-client acceptance gates remain blocked or unverified.
+**Status updated:** 2026-11-27 on `main`. Unity compilation, all 12 Play Mode tests, an Android ARM64 IL2CPP development build, and install/launch on one connected physical device are now verified. The two-client Unity/LAN gameplay gate remains unverified.
 
 ## Already present (by code inspection)
 
@@ -14,7 +14,7 @@
 - [x] P2C executable final turns, exhaustion-aware round scoring, cumulative match completion, fresh round resets, structured score/reveal projections, and deterministic full-match simulation.
 - [x] P3A authoritative SignalR gameplay with stable room-player mapping, per-room engine serialization, private/public projections, deadline processing, disconnect cleanup, and a real two-client full-match integration scenario.
 - [x] Lightweight .NET 10 GitHub Actions workflow for core/server builds plus smoke/game-engine and SignalR integration tests; Unity/Android builds are excluded.
-- [~] P3B-1 Unity networking/lobby/basic gameplay source is implemented; Editor, Android IL2CPP, and two-Unity-client behavior are not verified.
+- [~] P3B-1 Unity networking/lobby/basic gameplay source is implemented; Editor tests and one-device Android launch are verified, while two-Unity-client behavior is not verified.
 - [x] Owner-confirmed Android build installed and launched on a physical phone (reported 2026-11-25; not independently reproduced in this work session).
 
 ## P0 — stabilize the Unity prototype
@@ -23,10 +23,10 @@
 2. [x] Declared `com.unity.inputsystem` 1.20.1, referenced its assembly, retained `activeInputHandler: 1`, and configured `InputSystemUIInputModule` for mouse and touch through the default UI actions.
 3. [x] Replaced runtime `DestroyImmediate()` calls with lifecycle-safe `Destroy()` or object reuse/deactivation. The bootstrap reconciles one EventSystem, one runtime UI canvas, and one set of persistent managers.
 4. [x] Added static-state and `sceneLoaded` reset handling for Enter/Exit Play Mode and disabled domain reload. Added repeated-transition Play Mode tests.
-5. [ ] Repeated scene-transition runtime execution, Editor compilation, 9:16/touch validation, and automated Unity tests remain unverified. Earlier Unity test attempts were blocked by entitlement and package/cache issues; do not treat those attempts as passing.
-6. [x] The owner reports that an Android APK was built, installed, and launched on a physical phone. This agent has not independently repeated the build or device test.
+5. [x] Editor compilation and all 12 Play Mode tests passed, including repeated scene transitions. The installed app rendered correctly in portrait on the connected device; detailed manual touch-input validation remains outstanding.
+6. [x] An Android ARM64 IL2CPP development APK was built, installed, launched, and confirmed as the foreground activity on a physical phone on 2026-11-26.
 
-**P0 acceptance:** Android build/install/launch has owner-reported physical-device confirmation. Unity automated tests, repeated navigation, and touch-input checks remain unverified; this distinction must be preserved in status reports. P1 core work can proceed. No fake online buttons or gameplay completion are implied.
+**P0 acceptance:** Unity automated tests and repeated navigation passed, and the prior Android build/install/launch is recorded below. Detailed manual touch-input checks remain unverified.
 
 ## P1 — deterministic server-authoritative round engine
 
@@ -95,9 +95,9 @@
 2. [~] Implement lobby Create/Join/Leave, stable `LocalPlayerId` mapping, roster identity labels, and host-only Start UI.
 3. [~] Implement server-backed initial peeks, draw/view, discard/replace, J/Q/K ability resolution, call/end turn, reaction Done, and monotonic public/private state application. Hand cards render face down; only authorized known cards and the private draw can be temporarily revealed. Action buttons use a touch-scrollable vertical layout.
 4. [x] Preserve P3A disconnect behavior: active-match disconnection abandons the room. No reconnect support is added.
-5. [~] Add Unity tests for numeric protocol serialization, frame splitting, duplicate completion, pending-call cleanup, main-thread dispatch, stale sequences, temporary reveals, action layout, and repeated-scene subscription bounds. Tests are not run until Editor/package access is restored.
-6. [ ] Resolve `com.unity.nuget.newtonsoft-json` using Unity Package Manager and commit its generated `packages-lock.json`. The current Editor attempt stopped before package resolution because no Unity Editor license entitlement is active.
-7. [ ] Verify Editor compilation and Play Mode tests, then test Android ARM64 IL2CPP and two actual Unity clients against the LAN server. Until those pass, do not claim P3B-1 complete or begin P3B-2.
+5. [x] Add and run Unity tests for numeric protocol serialization, frame splitting, duplicate completion, pending-call cleanup, main-thread dispatch, stale sequences, temporary reveals, action layout, and repeated-scene subscription bounds. All 12 passed on 2026-11-26.
+6. [x] Resolve `com.unity.nuget.newtonsoft-json` using Unity Package Manager and record it in generated `packages-lock.json`.
+7. [~] Editor compilation, Play Mode tests, Android ARM64 IL2CPP build, and one-device launch are verified. Two actual Unity clients against the LAN server remain unverified, so P3B-1 acceptance is not complete.
 
 ## P4 — release readiness
 
@@ -106,11 +106,11 @@
 
 ## Known technical findings
 
-- `SceneBootstrap.cs` deduplicates runtime UI/EventSystem and uses `InputSystemUIInputModule`; Editor validation remains required.
-- `manifest.json` declares `com.unity.inputsystem` and `com.unity.nuget.newtonsoft-json`. Package Manager did not run to completion, and the checked-in lock file still lacks the Newtonsoft entry.
-- `NetworkManager` contains a custom SignalR JSON transport. It has not been compiled or run in the licensed Editor, Android IL2CPP, or against P3A with a Unity client.
+- `SceneBootstrap.cs` deduplicates runtime UI/EventSystem and uses `InputSystemUIInputModule`; its Play Mode coverage passes.
+- `manifest.json` and the generated package lock declare `com.unity.inputsystem` and `com.unity.nuget.newtonsoft-json`.
+- `NetworkManager` compiles in the licensed Editor and Android IL2CPP. Live Unity-to-P3A transport behavior remains unverified.
 - MainMenu Create/Join/Leave/Start and the basic server-backed GameTable controls are source-implemented; Play Mode and two-client UI behavior are unverified.
-- `GameTableScreen` keeps hand values hidden by default and offers temporary reveals using only the local private projection; privacy behavior is covered by source-level tests that are not yet executed.
+- `GameTableScreen` keeps hand values hidden by default and offers temporary reveals using only the local private projection; temporary reveal behavior is covered by passing Play Mode tests.
 - Android now requests Internet permission. Generated Gradle manifests enable cleartext only for development builds; release builds leave it disabled. HTTPS/WSS is required for release deployments.
 - `.github/workflows/dotnet.yml` now restores/builds the .NET projects and runs both the core smoke suite and SignalR integration executable on pushes and pull requests targeting `main`; it intentionally has no Unity or Android build.
 
@@ -122,6 +122,16 @@
 - Unity 6000.6.10f1 batch Editor compile attempt — blocked before project/package compilation; Unity Licensing reported “No valid Unity Editor license found” and exited with code 198.
 - Unity Package Manager did not resolve Newtonsoft; `Packages/packages-lock.json` remains unchanged rather than being hand-edited. Unity tests, Android build, LAN server test, and two physical Unity clients were not run.
 - Do not infer successful C# compilation, Android permissions in a built APK, IL2CPP/AOT compatibility, device networking, or P3B-1 completion from these source changes or the .NET server tests.
+
+### Mobile launch fix validation (2026-11-26)
+
+- Fixed the blocking `GameTableScreen` compile ambiguity and explicit Newtonsoft/test assembly references exposed by licensed Editor compilation.
+- Unity 6000.6.10f1 batch compilation exited successfully.
+- Unity Play Mode tests passed: 12/12.
+- `dotnet run --project tests/Alzheimer.SmokeTests -c Release` passed: 1,869 assertions.
+- `client/Alzheimer.Client/build-android.ps1` completed an ARM64 IL2CPP development build after being changed to wait for the Unity process reliably.
+- The APK was installed with `adb install -r`, launched on device `2502FRA65G`, remained the foreground `UnityPlayerActivity`, rendered the main menu in portrait, and emitted no fatal Android exception during the launch check.
+- Live server connection, touch interaction, and two-client gameplay remain unverified.
 
 ## Update policy
 
@@ -159,3 +169,14 @@ When completing a milestone, link its commit/PR, add the validation command/resu
 - `dotnet run --project tests/Alzheimer.Server.IntegrationTests -c Release --no-restore` — passed; 214 assertions over five independent SignalR client connections, including full two-player match completion.
 - The integration scenario uses a controllable core clock and seeded deck; ability and reaction deadlines were advanced without waiting 30 real seconds. It inspected the serialized public/private SignalR event objects for hidden card IDs.
 - Final `git diff --check` passed. GitHub Actions has not run. Unity/Android builds, Unity transport, production authentication, and reconnect were not run.
+
+### Main consolidation validation (2026-11-27)
+
+All four feature branches were already ancestors of `main`; fast-forward merge checks confirmed no missing branch commits. The outstanding Unity compilation, package-lock, test-reference, and build-process fixes are consolidated on `main` with this validation record.
+
+- `dotnet run --project tests/Alzheimer.SmokeTests` passed: 1,869 assertions.
+- `dotnet run --project tests/Alzheimer.Server.IntegrationTests -c Release` passed: 216 assertions.
+- `dotnet build server/Alzheimer.Server -c Release` passed: 0 warnings, 0 errors; includes the core build.
+- Unity 6000.6.10f1 batch `-runTests -testPlatform PlayMode` passed: 12/12; results and log were written to the local temporary directory as `Alzheimer-merge-playmode.xml` and `Alzheimer-merge-playmode.log`.
+- `./client/Alzheimer.Client/build-android.ps1 -UnityExe 'C:/Program Files/Unity/Hub/Editor/6000.6.10f1/Editor/Unity.exe'` passed, producing `builds/android/Alzheimer.apk` (ARM64 IL2CPP development build).
+- Device installation/launch was not repeated during consolidation. Live Unity-to-server connectivity, two-client gameplay, and detailed touch-input checks remain unverified.

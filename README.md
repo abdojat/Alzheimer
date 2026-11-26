@@ -6,7 +6,7 @@ A starter implementation for the customized Alzheimer multiplayer card game. Inc
 - A pure C# rules library with deterministic P1/P2A/P2B/P2C gameplay, final turns, exhaustion-aware scoring, and match progression.
 - A no-NuGet-dependency smoke test console app covering utility, rules, regression, privacy, and deterministic full-match scenarios.
 - An ASP.NET Core 10 + SignalR authoritative multiplayer server with per-room game engines, versioned gameplay commands, private/public projections, serialized actions, and server-controlled deadlines.
-- A Unity 6 Android client with P3B-1 SignalR JSON/WebSocket, lobby, and basic gameplay source. Editor compilation, Package Manager resolution, Android IL2CPP, and two-Unity-client behavior are not yet verified; it must not be treated as a tested online game.
+- A Unity 6 Android client with P3B-1 SignalR JSON/WebSocket, lobby, and basic gameplay source. Editor compilation, Package Manager resolution, Play Mode tests, and Android IL2CPP are verified; live two-Unity-client gameplay remains unverified.
 
 ## Requirements
 
@@ -95,7 +95,7 @@ After a voluntary or automatic call, `FinalPhase` identifies the next eligible p
 
 The last normal draw resolves before the call/end decision; an uncalled last-card turn still opens its reaction window. A final-card penalty does not close an active reaction window, and each later undrawn penalty adds 10 points. On completion, `RoundScorer` sums hand values and penalties before applying the caller-specific or no-caller depletion doubling. `PublicGameView.LastCompletedRound` contains base/adjusted/cumulative scores, reason, caller, required/pending final-turn IDs, and the end-of-round hand reveal; hand identities remain private before scoring. If no cumulative score reaches 100, a fresh shuffled deck and private-knowledge reset start the next round with the same host/seating. At or above 100, `MatchCompleted` and `WinnerPlayerIds` expose the lowest cumulative-score winner(s).
 
-The core remains the only rules engine; SignalR invokes it through an authoritative per-room server coordinator. The Unity client contains P3B-1 transport, lobby, and basic gameplay code, but this code has not passed Unity compilation or runtime validation.
+The core remains the only rules engine; SignalR invokes it through an authoritative per-room server coordinator. The Unity client contains P3B-1 transport, lobby, and basic gameplay code, with verified Unity compilation and Play Mode tests; live Unity-to-server gameplay remains unverified.
 
 ## GitHub Actions CI
 
@@ -157,7 +157,7 @@ dotnet run --project tests/Alzheimer.Server.IntegrationTests -c Release
 
 It starts an in-process Kestrel server, connects independent .NET SignalR clients, and validates private serialized projections, gameplay actions, concurrency, deadlines, room isolation/disconnection, a complete scored round, and match completion without real-time timer waits. The same runner is included in `.github/workflows/dotnet.yml`; GitHub CI must run after push before its status can be claimed.
 
-> P3B-1 source now includes negotiation and SignalR JSON handshake/framing over `ClientWebSocket`, serialized sends, invocation completion/cleanup, heartbeat and main-thread event dispatch; numeric protocol enums; lobby and server-command UI; sequence-checked public/private projections; and timed, authorized card reveals. This is implementation status only. Unity Editor launch was blocked by the missing Unity license entitlement (exit code 198), so Package Manager did not resolve `com.unity.nuget.newtonsoft-json` and `packages-lock.json` remains unupdated. Unity Play Mode tests, Android IL2CPP, and two Unity clients have not been run. The server's .NET integration test uses .NET clients and is not proof of Unity transport compatibility.
+> P3B-1 source now includes negotiation and SignalR JSON WebSocket transport, lobby and server-command UI, sequence-checked public/private projections, and timed authorized card reveals. On 2026-11-26 the project compiled in Unity 6000.6.10f1, all 12 Play Mode tests passed, and an ARM64 IL2CPP development APK was built, installed, and launched on one physical phone. Live server connectivity, touch interaction, and two simultaneous Unity clients remain unverified; the server's .NET integration test is not proof of Unity transport compatibility.
 
 ## Create the Unity application
 
@@ -167,7 +167,7 @@ The generated Unity project is at `client/Alzheimer.Client`.
 2. Use Unity **6000.6.10f1**. Let Package Manager restore packages.
 3. Open `Assets/Scenes/MainMenu.unity` and press **Play**.
 4. Use `PLAY` to open the `Assets/Scenes/GameTable.unity` client.
-5. Connect to the server, create or join a room, and use the server-backed table controls. These flows are source-implemented but remain unverified until the Editor resolves packages and compiles the project.
+5. Connect to the server, create or join a room, and use the server-backed table controls. Compilation and one-device launch are verified; live Unity-to-server and two-client gameplay remain unverified.
 
 The generated UI uses uGUI, a 1080×1920 Scale With Screen Size canvas, safe-area handling, and portrait layout. Gameplay action buttons use a touch-scrollable vertical layout; hand cards remain face down except during short authorized reveals. The starter script remains outside the Unity project for reference; the runtime UI is implemented in `Assets/Scripts/UI/`.
 
@@ -224,4 +224,4 @@ The current implementation status and P1/P2A/P2B/P2C acceptance boundaries are t
 - Use a per-room lock/serialized action queue for simultaneous throws. No player has priority by game rule, but the server must decide an order deterministically.
 - Server-side absolute UTC deadlines govern ability/reaction timers; clients only display them. The core engine enforces both P2A ability and P2B reaction deadlines.
 - Persist a match state transition/event log before adding real-money or ranked play. Do not rely on Unity physics/network sync for this card game.
-- Confirm all special edge cases against `docs/Alzheimer_Card_Game_Rules_v1.1.md`. P1–P2C are implemented in the pure C# engine; server gameplay/networking and Unity integration remain unimplemented.
+- Confirm all special edge cases against `docs/Alzheimer_Card_Game_Rules_v1.1.md`. P1–P2C are implemented in the pure C# engine; server gameplay/networking is implemented and integration-tested; live Unity multiplayer validation remains outstanding.

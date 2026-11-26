@@ -126,7 +126,7 @@ namespace Alzheimer.Client.Tests
             Assert.That(firstPart, Is.Empty);
 
             var remainder = new byte[bytes.Length - split];
-            Array.Copy(bytes, split, remainder, 0, remainder.Length);
+            System.Array.Copy(bytes, split, remainder, 0, remainder.Length);
             var frames = parser.Append(remainder, remainder.Length);
             Assert.That(frames, Has.Count.EqualTo(2));
             Assert.That(frames[0], Is.EqualTo("{\"name\":\"J♥\"}"));
