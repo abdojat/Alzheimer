@@ -8,7 +8,7 @@ public sealed class LobbyHub(LobbyStore rooms) : Hub
     {
         var room = rooms.Create(Context.ConnectionId, deckCount, maxPlayers, playerName);
         await Groups.AddToGroupAsync(Context.ConnectionId, room.Code);
-        await Clients.Group(room.Code).SendAsync("RoomUpdated", room);
+        await Clients.Group(room.Code).SendAsync("RoomUpdated", room with { LocalPlayerId = null });
         return room;
     }
 
@@ -16,7 +16,7 @@ public sealed class LobbyHub(LobbyStore rooms) : Hub
     {
         var room = await rooms.JoinAsync(Context.ConnectionId, code, playerName);
         await Groups.AddToGroupAsync(Context.ConnectionId, room.Code);
-        await Clients.Group(room.Code).SendAsync("RoomUpdated", room);
+        await Clients.Group(room.Code).SendAsync("RoomUpdated", room with { LocalPlayerId = null });
         var currentGame = await rooms.GetCurrentGameSnapshotAsync(Context.ConnectionId);
         if (currentGame is not null)
         {

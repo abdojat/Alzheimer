@@ -4,7 +4,12 @@ using System.Security.Cryptography;
 namespace Alzheimer.Server;
 
 public sealed record LobbyPlayer(string PlayerId, string DisplayName, bool IsHost);
-public sealed record LobbySnapshot(string Code, int DeckCount, int MaxPlayers, IReadOnlyList<LobbyPlayer> Players);
+public sealed record LobbySnapshot(
+    string Code,
+    int DeckCount,
+    int MaxPlayers,
+    IReadOnlyList<LobbyPlayer> Players,
+    string? LocalPlayerId = null);
 
 internal sealed class Lobby
 {
@@ -17,8 +22,12 @@ internal sealed class Lobby
     public HashSet<(string PlayerId, Guid CommandId)> ProcessedCommandIds { get; } = new();
     public long UpdateSequence { get; set; }
 
-    public LobbySnapshot Snapshot() => new(Code, Settings.DeckCount, Settings.MaxPlayers,
-        Players.Select(p => new LobbyPlayer(p.PlayerId, p.DisplayName, p.PlayerId == HostPlayerId)).ToArray());
+    public LobbySnapshot Snapshot(string? localPlayerId = null) => new(
+        Code,
+        Settings.DeckCount,
+        Settings.MaxPlayers,
+        Players.Select(p => new LobbyPlayer(p.PlayerId, p.DisplayName, p.PlayerId == HostPlayerId)).ToArray(),
+        localPlayerId);
 }
 
 internal sealed record RoomPlayer(string ConnectionId, string PlayerId, string DisplayName);
@@ -62,7 +71,7 @@ public sealed class LobbyStore
             room.Players.Add(new RoomPlayer(connectionId, playerId, name));
             _rooms.Add(code, room);
             _roomsByConnection.Add(connectionId, room);
-            return room.Snapshot();
+            return room.Snapshot(playerId);
         }
     }
 
@@ -92,9 +101,10 @@ public sealed class LobbyStore
                     throw new InvalidOperationException("Joining an active match is not supported.");
                 if (room.Players.Count >= room.Settings.MaxPlayers)
                     throw new InvalidOperationException("Room is full.");
-                room.Players.Add(new RoomPlayer(connectionId, Guid.NewGuid().ToString("N"), name));
+                var playerId = Guid.NewGuid().ToString("N");
+                room.Players.Add(new RoomPlayer(connectionId, playerId, name));
                 _roomsByConnection.Add(connectionId, room);
-                return room.Snapshot();
+                return room.Snapshot(playerId);
             }
         }
         finally

@@ -46,13 +46,17 @@ try
         secondRoomHost.Connection.StartAsync(),
         secondRoomGuest.Connection.StartAsync());
 
-    var room = await host.Connection.InvokeAsync<LobbySnapshot>("CreateRoom", 1, 3, "Host");
+    var room = await host.Connection.InvokeAsync<LobbySnapshot>("CreateRoom", 1, 3, "Same Player");
     Check(room.DeckCount == 1 && room.MaxPlayers == 3 && room.Players.Count == 1, "host room settings are retained");
+    Check(!string.IsNullOrEmpty(room.LocalPlayerId), "create room response identifies the caller's stable player id");
     var insufficientPlayers = await host.Connection.InvokeAsync<StartMatchResponseV1>("StartMatchV1");
     Check(!insufficientPlayers.Accepted && insufficientPlayers.ErrorCode == "AtLeastTwoPlayersRequired", "host cannot start with one player");
 
-    var joined = await guest.Connection.InvokeAsync<LobbySnapshot>("JoinRoom", room.Code, "Guest");
+    var joined = await guest.Connection.InvokeAsync<LobbySnapshot>("JoinRoom", room.Code, "Same Player");
     Check(joined.Players.Count == 2 && joined.Players[0].IsHost, "guest joins in clockwise seating order");
+    Check(!string.IsNullOrEmpty(joined.LocalPlayerId)
+        && joined.LocalPlayerId != room.LocalPlayerId,
+        "join room response identifies the caller independently from the host");
     var nonHostStart = await guest.Connection.InvokeAsync<StartMatchResponseV1>("StartMatchV1");
     Check(!nonHostStart.Accepted && nonHostStart.ErrorCode == "HostOnly", "non-host start is rejected");
 

@@ -91,12 +91,11 @@
 **P3A acceptance:** the local server integration runner passed with two gameplay clients completing actual core-scored rounds through match completion and observing authorized public/private state. This does not claim Unity transport, production authentication, reconnect support, or a successful remote CI run.
 
 ## P3B — Unity multiplayer client (not started)
-
-1. Select an Android/IL2CPP-compatible SignalR client transport (or choose and version a native WebSocket protocol); verify package/AOT compatibility before adding dependencies.
-2. Add Unity lobby Create/Join/Leave UI and map the server's stable room player ID to the local connection session. Do not trust client-supplied actor IDs.
-3. Start matches via `StartMatchV1`, submit `GameplayCommandV1`, and apply only public events plus the current player's `GamePrivateStateUpdatedV1`; discard stale update sequences.
-4. Add reconnect UX only after an explicit identity/authentication policy exists; current P3A disconnect behavior abandons the match.
-5. Verify Android Editor/IL2CPP builds, two-device transport, privacy, touch interaction, and a full match before claiming P3B complete.
+1. [~] Select an Android/IL2CPP-compatible SignalR transport. P3B-1 currently implements the versioned SignalR JSON WebSocket framing and negotiate flow in Unity with `System.Net.WebSockets.ClientWebSocket` and NewtonSoft.Json; Unity/Android compatibility is unverified.
+2. [~] Add lobby Create/Join/Leave UI and expose the caller's stable room player ID through the backward-compatible `LobbySnapshot.LocalPlayerId`. Host-only start UI and room roster rendering are implemented.
+3. [~] Start matches via `StartMatchV1`, submit ordinary draw/discard/replace/peek/post-resolution actions, and apply public/private sequence updates.
+4. [ ] Add reconnect UX only after an explicit identity/authentication policy exists; current P3A disconnect behavior abandons the match.
+5. [ ] Verify Android Editor/IL2CPP builds, two-device transport, privacy, touch interaction, and a full match before claiming P3B complete.
 
 ## P4 — release readiness
 

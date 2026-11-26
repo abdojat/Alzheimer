@@ -137,6 +137,18 @@ Player IDs are random stable seat identities for the lifetime of a room and are 
 
 Typical two-client session: host calls `CreateRoom`, guest calls `JoinRoom`, host calls `StartMatchV1`, both submit `PeekInitialCards`, and the active player submits `DrawCard` followed by a supported resolution and `EndTurn`. Each room member can then submit `ThrowReactionCard` or `MarkReactionDone` using the active reaction-window ID. The server drives the next turn or timeout.
 
+CreateRoom and JoinRoom return the caller's stable `LocalPlayerId` in `LobbySnapshot` for P3B identity mapping. RoomUpdated broadcasts omit this caller-specific field. Player names are not used to identify the local seat.
+
+## P3B local network setup
+
+For a phone and Windows PC on the same Wi-Fi network:
+
+```powershell
+dotnet run --project server/Alzheimer.Server -- --urls http://0.0.0.0:5050
+```
+
+Find the PC IPv4 address with `ipconfig`, configure that address in the Unity server URL field, and enter `http://<PC-IP>:5050`. Do not use `localhost` on Android. Development cleartext HTTP can be blocked by Android platform settings; release builds should use HTTPS/WSS. Allow the port through Windows Firewall for local-network testing if it is blocked.
+
 Run the reproducible two-game-client SignalR full-match scenario (the runner also creates helper clients for lifecycle and multi-room checks):
 
 ```bash
@@ -145,7 +157,7 @@ dotnet run --project tests/Alzheimer.Server.IntegrationTests -c Release
 
 It starts an in-process Kestrel server, connects independent .NET SignalR clients, and validates private serialized projections, gameplay actions, concurrency, deadlines, room isolation/disconnection, a complete scored round, and match completion without real-time timer waits. The same runner is included in `.github/workflows/dotnet.yml`; GitHub CI must run after push before its status can be claimed.
 
-> Unity connectivity is P3B: select and verify an Android/IL2CPP-compatible SignalR transport (or an explicitly versioned native WebSocket protocol), map the room's stable player ID to the local client session, and render only the authorized projections. No Unity network transport or multiplayer UI is implemented here.
+> P3B-1 transport implementation is in progress in Unity: the client uses the standard SignalR JSON hub WebSocket framing over `System.Net.WebSockets.ClientWebSocket`, posts to the hub negotiate endpoint, marshals callbacks to the Unity main thread, and uses Newtonsoft.Json for protocol DTOs. Unity/Android transport and two-device behavior have not yet been executed.
 
 ## Create the Unity application
 
