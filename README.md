@@ -6,7 +6,7 @@ A starter implementation for the customized Alzheimer multiplayer card game. Inc
 - A pure C# rules library with deterministic P1/P2A/P2B/P2C gameplay, final turns, exhaustion-aware scoring, and match progression.
 - A no-NuGet-dependency smoke test console app covering utility, rules, regression, privacy, and deterministic full-match scenarios.
 - An ASP.NET Core 10 + SignalR authoritative multiplayer server with per-room game engines, versioned gameplay commands, private/public projections, serialized actions, and server-controlled deadlines.
-- A small **local UI smoke test** Unity MonoBehaviour. This is *not* a functional game.
+- A Unity 6 Android client with P3B-1 SignalR JSON/WebSocket, lobby, and basic gameplay source. Editor compilation, Package Manager resolution, Android IL2CPP, and two-Unity-client behavior are not yet verified; it must not be treated as a tested online game.
 
 ## Requirements
 
@@ -95,7 +95,7 @@ After a voluntary or automatic call, `FinalPhase` identifies the next eligible p
 
 The last normal draw resolves before the call/end decision; an uncalled last-card turn still opens its reaction window. A final-card penalty does not close an active reaction window, and each later undrawn penalty adds 10 points. On completion, `RoundScorer` sums hand values and penalties before applying the caller-specific or no-caller depletion doubling. `PublicGameView.LastCompletedRound` contains base/adjusted/cumulative scores, reason, caller, required/pending final-turn IDs, and the end-of-round hand reveal; hand identities remain private before scoring. If no cumulative score reaches 100, a fresh shuffled deck and private-knowledge reset start the next round with the same host/seating. At or above 100, `MatchCompleted` and `WinnerPlayerIds` expose the lowest cumulative-score winner(s).
 
-The core remains the only rules engine; SignalR invokes it through an authoritative per-room server coordinator. The Unity client is not yet connected.
+The core remains the only rules engine; SignalR invokes it through an authoritative per-room server coordinator. The Unity client contains P3B-1 transport, lobby, and basic gameplay code, but this code has not passed Unity compilation or runtime validation.
 
 ## GitHub Actions CI
 
@@ -147,7 +147,7 @@ For a phone and Windows PC on the same Wi-Fi network:
 dotnet run --project server/Alzheimer.Server -- --urls http://0.0.0.0:5050
 ```
 
-Find the PC IPv4 address with `ipconfig`, configure that address in the Unity server URL field, and enter `http://<PC-IP>:5050`. Do not use `localhost` on Android. Development cleartext HTTP can be blocked by Android platform settings; release builds should use HTTPS/WSS. Allow the port through Windows Firewall for local-network testing if it is blocked.
+Find the PC IPv4 address with `ipconfig`, configure that address in the Unity server URL field, and enter `http://<PC-IP>:5050`. Do not use `localhost` on Android. The Android development build processor enables cleartext HTTP only for development builds; release builds keep Android cleartext disabled and should use HTTPS/WSS. The app requests Internet permission. Allow port 5050 through Windows Firewall for local-network testing if it is blocked.
 
 Run the reproducible two-game-client SignalR full-match scenario (the runner also creates helper clients for lifecycle and multi-room checks):
 
@@ -157,7 +157,7 @@ dotnet run --project tests/Alzheimer.Server.IntegrationTests -c Release
 
 It starts an in-process Kestrel server, connects independent .NET SignalR clients, and validates private serialized projections, gameplay actions, concurrency, deadlines, room isolation/disconnection, a complete scored round, and match completion without real-time timer waits. The same runner is included in `.github/workflows/dotnet.yml`; GitHub CI must run after push before its status can be claimed.
 
-> P3B-1 transport implementation is in progress in Unity: the client uses the standard SignalR JSON hub WebSocket framing over `System.Net.WebSockets.ClientWebSocket`, posts to the hub negotiate endpoint, marshals callbacks to the Unity main thread, and uses Newtonsoft.Json for protocol DTOs. Unity/Android transport and two-device behavior have not yet been executed.
+> P3B-1 source now includes negotiation and SignalR JSON handshake/framing over `ClientWebSocket`, serialized sends, invocation completion/cleanup, heartbeat and main-thread event dispatch; numeric protocol enums; lobby and server-command UI; sequence-checked public/private projections; and timed, authorized card reveals. This is implementation status only. Unity Editor launch was blocked by the missing Unity license entitlement (exit code 198), so Package Manager did not resolve `com.unity.nuget.newtonsoft-json` and `packages-lock.json` remains unupdated. Unity Play Mode tests, Android IL2CPP, and two Unity clients have not been run. The server's .NET integration test uses .NET clients and is not proof of Unity transport compatibility.
 
 ## Create the Unity application
 
@@ -166,10 +166,10 @@ The generated Unity project is at `client/Alzheimer.Client`.
 1. Open Unity Hub and choose **Open** -> `D:\Users\abdal\Desktop\Alzheimer\client\Alzheimer.Client`.
 2. Use Unity **6000.6.10f1**. Let Package Manager restore packages.
 3. Open `Assets/Scenes/MainMenu.unity` and press **Play**.
-4. Use `PLAY` to open the local `Assets/Scenes/GameTable.unity` preview.
-5. The card table displays four face-down cards; tapping a card selects it and updates the status text.
+4. Use `PLAY` to open the `Assets/Scenes/GameTable.unity` client.
+5. Connect to the server, create or join a room, and use the server-backed table controls. These flows are source-implemented but remain unverified until the Editor resolves packages and compiles the project.
 
-The generated UI uses uGUI, a 1080×1920 Scale With Screen Size canvas, safe-area handling, and portrait layout. The starter script remains outside the Unity project for reference; the runtime UI is implemented in `Assets/Scripts/UI/`.
+The generated UI uses uGUI, a 1080×1920 Scale With Screen Size canvas, safe-area handling, and portrait layout. Gameplay action buttons use a touch-scrollable vertical layout; hand cards remain face down except during short authorized reveals. The starter script remains outside the Unity project for reference; the runtime UI is implemented in `Assets/Scripts/UI/`.
 
 ## Android build
 

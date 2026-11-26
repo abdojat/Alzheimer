@@ -8,6 +8,7 @@ namespace Alzheimer.Client.UI
     {
         public int CardIndex { get; private set; }
         public bool IsSelected { get; private set; }
+        public bool IsRevealed { get; private set; }
 
         private Button _button;
         private Text _label;
@@ -24,6 +25,7 @@ namespace Alzheimer.Client.UI
             if (_button == null)
                 throw new InvalidOperationException("CardView requires a Button component.");
             _button.onClick.AddListener(OnTapped);
+            SetFaceDown();
             SetSelected(false);
         }
 
@@ -38,8 +40,20 @@ namespace Alzheimer.Client.UI
             IsSelected = selected;
             if (_image != null)
                 _image.color = selected ? new Color(1f, 0.78f, 0.28f) : new Color(0.92f, 0.92f, 0.92f);
+        }
+
+        public void Reveal(string value)
+        {
+            IsRevealed = true;
             if (_label != null)
-                _label.text = selected ? $"? \n{CardIndex + 1}" : "?";
+                _label.text = value;
+        }
+
+        public void SetFaceDown()
+        {
+            IsRevealed = false;
+            if (_label != null)
+                _label.text = "?";
         }
     }
 }

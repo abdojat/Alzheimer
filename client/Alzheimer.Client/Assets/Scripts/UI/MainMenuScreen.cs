@@ -26,6 +26,7 @@ namespace Alzheimer.Client.UI
             _network = Object.FindAnyObjectByType<NetworkManager>();
             if (_network != null)
             {
+                UnsubscribeNetworkEvents();
                 _network.StatusChanged += HandleStatus;
                 _network.LobbyChanged += HandleLobby;
                 _network.CommandRejected += HandleStatus;
@@ -46,16 +47,24 @@ namespace Alzheimer.Client.UI
             _maxPlayers.text = "4";
 
             CreateButton(panel.transform, "Connect", "CONNECT", 40, new Vector2(0.5f, 0.34f), Connect);
-            CreateButton(panel.transform, "Create Room", "CREATE ROOM", 40, new Vector2(0.30f, 0.26f), CreateRoom);
-            CreateButton(panel.transform, "Join Room", "JOIN ROOM", 40, new Vector2(0.70f, 0.26f), JoinRoom);
-            _startButton = CreateButton(panel.transform, "Start Match", "START MATCH", 40, new Vector2(0.5f, 0.14f), StartMatch);
+            var createRoom = CreateButton(panel.transform, "Create Room", "CREATE ROOM", 40, new Vector2(0.30f, 0.26f), CreateRoom);
+            createRoom.GetComponent<RectTransform>().sizeDelta = new Vector2(420f, 112f);
+            var joinRoom = CreateButton(panel.transform, "Join Room", "JOIN ROOM", 40, new Vector2(0.70f, 0.26f), JoinRoom);
+            joinRoom.GetComponent<RectTransform>().sizeDelta = new Vector2(420f, 112f);
+            _startButton = CreateButton(panel.transform, "Start Match", "START MATCH", 40, new Vector2(0.5f, 0.105f), StartMatch);
+            _startButton.interactable = false;
 
-            _roomCode = CreateInput(panel.transform, "RoomCode", "Room code", 0.5f, 0.18f);
+            _roomCode = CreateInput(panel.transform, "RoomCode", "Room code", 0.5f, 0.20f);
             _lobbyText = CreateText(panel.transform, "Lobby", "", 26);
-            SetAnchored(_lobbyText.rectTransform, new Vector2(0.5f, 0.10f), new Vector2(0.5f, 0.10f), new Vector2(930f, 100f));
+            SetAnchored(_lobbyText.rectTransform, new Vector2(0.5f, 0.025f), new Vector2(0.5f, 0.025f), new Vector2(930f, 70f));
         }
 
         private void OnDisable()
+        {
+            UnsubscribeNetworkEvents();
+        }
+
+        private void UnsubscribeNetworkEvents()
         {
             if (_network == null)
                 return;
@@ -108,7 +117,14 @@ namespace Alzheimer.Client.UI
             var names = new System.Collections.Generic.List<string>();
             if (lobby.Players != null)
                 foreach (var player in lobby.Players)
-                    names.Add(player.DisplayName + (player.IsHost ? " (host)" : ""));
+                {
+                    var playerTag = string.IsNullOrEmpty(player.PlayerId)
+                        ? ""
+                        : " [" + player.PlayerId.Substring(0, System.Math.Min(6, player.PlayerId.Length)) + "]";
+                    names.Add(player.DisplayName + playerTag
+                        + (player.IsHost ? " (host)" : "")
+                        + (player.PlayerId == lobby.LocalPlayerId ? " (you)" : ""));
+                }
             var roster = string.Join(" | ", names);
             _lobbyText.text = $"Room {lobby.Code}  |  {lobby.Players?.Length ?? 0}/{lobby.MaxPlayers}  |  {lobby.DeckCount} deck(s)\n{roster}";
             _roomCode.text = lobby.Code;
@@ -131,6 +147,8 @@ namespace Alzheimer.Client.UI
         private void HandleRoomClosed()
         {
             _lobbyText.text = "";
+            if (_startButton != null)
+                _startButton.interactable = false;
             HandleStatus("The active match ended because a player disconnected.");
         }
 

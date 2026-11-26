@@ -2,7 +2,7 @@
 
 Before any change, read `AGENTS.md`, `docs/Alzheimer_Card_Game_Rules_v1.1.md` for rules work, and `docs/DEVELOPMENT_ROADMAP.md`.
 
-**Project:** Custom Alzheimer multiplayer card game, Android-first. Unity 6 client, pure .NET 10 C# core, ASP.NET Core 10 + SignalR authoritative gameplay server. The server implements P3A gameplay; the Unity client is still a UI preview, not an online game.
+**Project:** Custom Alzheimer multiplayer card game, Android-first. Unity 6 client, pure .NET 10 C# core, ASP.NET Core 10 + SignalR authoritative gameplay server. P3A is server-authoritative; P3B-1 Unity networking/lobby/basic gameplay source is present but is not yet verified in the Unity Editor, on Android IL2CPP, or with two Unity clients.
 
 - Preserve the custom rules exactly. Never infer game behavior from other card games. Reaction matching is **rank only**; Queen has a persistent two-rank exception.
 - Server authoritative; no leaking hidden card identities or using client timers to decide game state.

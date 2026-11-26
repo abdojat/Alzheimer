@@ -1,6 +1,6 @@
 # Alzheimer — implementation roadmap and verified status
 
-**Status updated:** 2026-11-25 on `feat/p3a-multiplayer-server`. P0 device smoke-test status is owner-reported; P1/P2A/P2B/P2C validation reflects commands run for those milestones, and P3A results are recorded below.
+**Status updated:** 2026-11-26 on `feat/p3b-unity-online-client`. P0 device smoke-test status is owner-reported; P1/P2A/P2B/P2C and P3A validation reflects commands run for those milestones. P3B-1 source work is present but its Unity/Android/two-client acceptance gates remain blocked or unverified.
 
 ## Already present (by code inspection)
 
@@ -14,7 +14,7 @@
 - [x] P2C executable final turns, exhaustion-aware round scoring, cumulative match completion, fresh round resets, structured score/reveal projections, and deterministic full-match simulation.
 - [x] P3A authoritative SignalR gameplay with stable room-player mapping, per-room engine serialization, private/public projections, deadline processing, disconnect cleanup, and a real two-client full-match integration scenario.
 - [x] Lightweight .NET 10 GitHub Actions workflow for core/server builds plus smoke/game-engine and SignalR integration tests; Unity/Android builds are excluded.
-- [ ] Connected Unity online lobby/client (not implemented).
+- [~] P3B-1 Unity networking/lobby/basic gameplay source is implemented; Editor, Android IL2CPP, and two-Unity-client behavior are not verified.
 - [x] Owner-confirmed Android build installed and launched on a physical phone (reported 2026-11-25; not independently reproduced in this work session).
 
 ## P0 — stabilize the Unity prototype
@@ -46,7 +46,7 @@
 - `CompleteReactionWindow()` remains a trusted progression hook and refuses to close an early window; it closes only after the authoritative deadline. All players marking Done closes the window immediately.
 - `IGameClock` supplies transition timestamps plus P2A ability and P2B reaction deadlines. `ProcessTimeouts()` expires due ability/reaction windows, and each action checks for elapsed deadlines before validation.
 - `ThrowReactionCard` and `MarkReactionDone` carry the active reaction-window ID and a unique command ID. The engine rejects stale/replayed commands, validates actual server-owned card ranks, and is intentionally synchronous; a future server must serialize each room's commands.
-- The P3A server now uses this contract; Unity remains disconnected until P3B.
+- The P3A server uses this contract. The Unity P3B-1 client now submits commands but remains unverified against the live hub.
 
 ## P2A — special-card abilities and .NET CI
 
@@ -90,12 +90,14 @@
 
 **P3A acceptance:** the local server integration runner passed with two gameplay clients completing actual core-scored rounds through match completion and observing authorized public/private state. This does not claim Unity transport, production authentication, reconnect support, or a successful remote CI run.
 
-## P3B — Unity multiplayer client (not started)
-1. [~] Select an Android/IL2CPP-compatible SignalR transport. P3B-1 currently implements the versioned SignalR JSON WebSocket framing and negotiate flow in Unity with `System.Net.WebSockets.ClientWebSocket` and NewtonSoft.Json; Unity/Android compatibility is unverified.
-2. [~] Add lobby Create/Join/Leave UI and expose the caller's stable room player ID through the backward-compatible `LobbySnapshot.LocalPlayerId`. Host-only start UI and room roster rendering are implemented.
-3. [~] Start matches via `StartMatchV1`, submit ordinary draw/discard/replace/peek/post-resolution actions, and apply public/private sequence updates.
-4. [ ] Add reconnect UX only after an explicit identity/authentication policy exists; current P3A disconnect behavior abandons the match.
-5. [ ] Verify Android Editor/IL2CPP builds, two-device transport, privacy, touch interaction, and a full match before claiming P3B complete.
+## P3B — Unity multiplayer client (source in progress; acceptance not met)
+1. [~] Implement a custom version-1 SignalR JSON WebSocket transport using HTTP negotiation, the server connection token, handshake acknowledgement, record-separator framing, serialized sends, invocation IDs/completions, pings/close handling, cancellation, and main-thread event dispatch. Client command enums and projection enums are explicitly numeric to match the server's default `System.Text.Json` enum encoding. This source is not proven Unity/Android-compatible; `link.xml` preserves protocol DTOs for Newtonsoft reflection under IL2CPP.
+2. [~] Implement lobby Create/Join/Leave, stable `LocalPlayerId` mapping, roster identity labels, and host-only Start UI.
+3. [~] Implement server-backed initial peeks, draw/view, discard/replace, J/Q/K ability resolution, call/end turn, reaction Done, and monotonic public/private state application. Hand cards render face down; only authorized known cards and the private draw can be temporarily revealed. Action buttons use a touch-scrollable vertical layout.
+4. [x] Preserve P3A disconnect behavior: active-match disconnection abandons the room. No reconnect support is added.
+5. [~] Add Unity tests for numeric protocol serialization, frame splitting, duplicate completion, pending-call cleanup, main-thread dispatch, stale sequences, temporary reveals, action layout, and repeated-scene subscription bounds. Tests are not run until Editor/package access is restored.
+6. [ ] Resolve `com.unity.nuget.newtonsoft-json` using Unity Package Manager and commit its generated `packages-lock.json`. The current Editor attempt stopped before package resolution because no Unity Editor license entitlement is active.
+7. [ ] Verify Editor compilation and Play Mode tests, then test Android ARM64 IL2CPP and two actual Unity clients against the LAN server. Until those pass, do not claim P3B-1 complete or begin P3B-2.
 
 ## P4 — release readiness
 
@@ -104,12 +106,22 @@
 
 ## Known technical findings
 
-- `SceneBootstrap.cs` now subscribes to scene loads and rebuilds only the active prototype screen, while deduplicating runtime UI and using `InputSystemUIInputModule`; Unity Editor validation remains required.
-- `manifest.json` declares `com.unity.inputsystem`; Package Manager import and package-lock restoration remain to be confirmed by Unity.
-- `NetworkManager.Connect` explicitly reports no real network transport; `LobbyHub` now hosts authoritative SignalR game commands, but Unity does not connect to it yet.
-- `MainMenu` Create/Join/Settings are placeholder status actions.
-- `GameTableScreen` draws four placeholders and starts/stops its timer immediately; it has no actual gameplay mechanics.
+- `SceneBootstrap.cs` deduplicates runtime UI/EventSystem and uses `InputSystemUIInputModule`; Editor validation remains required.
+- `manifest.json` declares `com.unity.inputsystem` and `com.unity.nuget.newtonsoft-json`. Package Manager did not run to completion, and the checked-in lock file still lacks the Newtonsoft entry.
+- `NetworkManager` contains a custom SignalR JSON transport. It has not been compiled or run in the licensed Editor, Android IL2CPP, or against P3A with a Unity client.
+- MainMenu Create/Join/Leave/Start and the basic server-backed GameTable controls are source-implemented; Play Mode and two-client UI behavior are unverified.
+- `GameTableScreen` keeps hand values hidden by default and offers temporary reveals using only the local private projection; privacy behavior is covered by source-level tests that are not yet executed.
+- Android now requests Internet permission. Generated Gradle manifests enable cleartext only for development builds; release builds leave it disabled. HTTPS/WSS is required for release deployments.
 - `.github/workflows/dotnet.yml` now restores/builds the .NET projects and runs both the core smoke suite and SignalR integration executable on pushes and pull requests targeting `main`; it intentionally has no Unity or Android build.
+
+### P3B-1 validation attempt (2026-11-26)
+
+- `dotnet run --project tests/Alzheimer.SmokeTests -c Release` — passed; 1,869 assertions.
+- `dotnet run --project tests/Alzheimer.Server.IntegrationTests -c Release` — passed; 216 assertions, including two independent .NET SignalR clients completing a match. This does not exercise the Unity transport.
+- `dotnet build server/Alzheimer.Server -c Release` — passed; 0 warnings, 0 errors.
+- Unity 6000.6.10f1 batch Editor compile attempt — blocked before project/package compilation; Unity Licensing reported “No valid Unity Editor license found” and exited with code 198.
+- Unity Package Manager did not resolve Newtonsoft; `Packages/packages-lock.json` remains unchanged rather than being hand-edited. Unity tests, Android build, LAN server test, and two physical Unity clients were not run.
+- Do not infer successful C# compilation, Android permissions in a built APK, IL2CPP/AOT compatibility, device networking, or P3B-1 completion from these source changes or the .NET server tests.
 
 ## Update policy
 

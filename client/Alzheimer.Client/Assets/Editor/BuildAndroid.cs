@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Xml.Linq;
+using UnityEditor.Android;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
@@ -75,6 +77,33 @@ namespace Alzheimer.Client.Editor
                     return args[i + 1];
             }
             return null;
+        }
+
+        public sealed class AndroidCleartextBuildProcessor : IPostGenerateGradleAndroidProject
+        {
+            private static readonly XNamespace AndroidNamespace = "http://schemas.android.com/apk/res/android";
+
+            public int callbackOrder => 0;
+
+            public void OnPostGenerateGradleAndroidProject(string path)
+            {
+                var manifestPath = Path.Combine(path, "src", "main", "AndroidManifest.xml");
+                if (!File.Exists(manifestPath))
+                    throw new FileNotFoundException("Unity did not generate the Android library manifest.", manifestPath);
+
+                var manifest = XDocument.Load(manifestPath);
+                var application = manifest.Root?.Element("application");
+                if (application == null)
+                    throw new InvalidDataException("Generated Android manifest has no application element.");
+
+                var cleartext = application.Attribute(AndroidNamespace + "usesCleartextTraffic");
+                if (EditorUserBuildSettings.development)
+                    application.SetAttributeValue(AndroidNamespace + "usesCleartextTraffic", "true");
+                else
+                    cleartext?.Remove();
+
+                manifest.Save(manifestPath);
+            }
         }
     }
 }

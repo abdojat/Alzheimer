@@ -1,0 +1,23 @@
+<linker>
+  <assembly fullname="Alzheimer.Client">
+    <type fullname="Alzheimer.Client.Networking.GameplayActionV1" preserve="all" />
+    <type fullname="Alzheimer.Client.Networking.GamePhaseV1" preserve="all" />
+    <type fullname="Alzheimer.Client.Networking.DrawResolutionOptionV1" preserve="all" />
+    <type fullname="Alzheimer.Client.Networking.CardRankV1" preserve="all" />
+    <type fullname="Alzheimer.Client.Networking.CardSuitV1" preserve="all" />
+    <type fullname="Alzheimer.Client.Networking.CardKnowledgeV1" preserve="all" />
+    <type fullname="Alzheimer.Client.Networking.LobbyPlayerV1" preserve="all" />
+    <type fullname="Alzheimer.Client.Networking.LobbySnapshotV1" preserve="all" />
+    <type fullname="Alzheimer.Client.Networking.CardViewV1" preserve="all" />
+    <type fullname="Alzheimer.Client.Networking.CardSlotViewV1" preserve="all" />
+    <type fullname="Alzheimer.Client.Networking.PublicPlayerViewV1" preserve="all" />
+    <type fullname="Alzheimer.Client.Networking.PublicGameViewV1" preserve="all" />
+    <type fullname="Alzheimer.Client.Networking.PlayerGameViewV1" preserve="all" />
+    <type fullname="Alzheimer.Client.Networking.GamePublicUpdateV1" preserve="all" />
+    <type fullname="Alzheimer.Client.Networking.GamePrivateUpdateV1" preserve="all" />
+    <type fullname="Alzheimer.Client.Networking.StartMatchResponseV1" preserve="all" />
+    <type fullname="Alzheimer.Client.Networking.GameCommandResponseV1" preserve="all" />
+    <type fullname="Alzheimer.Client.Networking.GameplayCommandV1" preserve="all" />
+    <type fullname="Alzheimer.Client.Networking.NegotiateResponseV1" preserve="all" />
+  </assembly>
+</linker>
