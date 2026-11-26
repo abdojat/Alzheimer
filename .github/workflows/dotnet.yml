@@ -26,6 +26,7 @@ jobs:
           dotnet restore core/Alzheimer.Core/Alzheimer.Core.csproj
           dotnet restore server/Alzheimer.Server/Alzheimer.Server.csproj
           dotnet restore tests/Alzheimer.SmokeTests/Alzheimer.SmokeTests.csproj
+          dotnet restore tests/Alzheimer.Server.IntegrationTests/Alzheimer.Server.IntegrationTests.csproj
 
       - name: Build Alzheimer.Core
         run: dotnet build core/Alzheimer.Core/Alzheimer.Core.csproj --configuration Release --no-restore
@@ -35,3 +36,6 @@ jobs:
 
       - name: Run smoke and game engine tests
         run: dotnet run --project tests/Alzheimer.SmokeTests/Alzheimer.SmokeTests.csproj --configuration Release --no-restore
+
+      - name: Run SignalR multiplayer integration tests
+        run: dotnet run --project tests/Alzheimer.Server.IntegrationTests/Alzheimer.Server.IntegrationTests.csproj --configuration Release --no-restore

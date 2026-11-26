@@ -3,7 +3,7 @@ applyTo: "core/**,server/**,tests/**"
 ---
 # Server and rules engine instructions
 
-Authoritative source: `docs/Alzheimer_Card_Game_Rules_v1.1.md`. `DeckFactory`, `PlayingCard`, `ReactionRules`, `RoundScorer`, and `RoomSettings` are rules utilities. `AlzheimerRoundEngine` provides deterministic round setup, P2A abilities, P2B reactions, P2C executable final turns, exhaustion-aware scoring, and automatic match progression/reset. `LobbyHub` and `LobbyStore` implement rooms only.
+Authoritative source: `docs/Alzheimer_Card_Game_Rules_v1.1.md`. `DeckFactory`, `PlayingCard`, `ReactionRules`, `RoundScorer`, and `RoomSettings` are rules utilities. `AlzheimerRoundEngine` provides deterministic round setup, P2A abilities, P2B reactions, P2C executable final turns, exhaustion-aware scoring, and automatic match progression/reset. `LobbyHub` and `LobbyStore` own one authoritative engine per started room, stable room-player identity mapping, per-room serialization, protocol validation, projections, and active-match cleanup.
 
 ## Design the next vertical slice as pure, testable C#
 
@@ -30,6 +30,10 @@ Authoritative source: `docs/Alzheimer_Card_Game_Rules_v1.1.md`. `DeckFactory`, `
 - Never broadcast the full game state, private card ranks or private knowledge. Project public state per room and private views to each player.
 - Use structured events/snapshots rather than exposing internal mutable object references. Guard against duplicate submissions and stale-turn actions.
 - Scope network work to one end-to-end feature at a time; verify at least two concurrent clients before claiming online gameplay works.
+- Gameplay transport is protocol v1: `StartMatchV1` and `SubmitGameplayCommandV1(GameplayCommandV1)`. Derive the actor from connection membership; never add a client-supplied actor/player ID to commands.
+- `GameStateUpdatedV1` and `MatchStartedV1` carry public projections with monotonically increasing state sequence numbers. `GamePrivateStateUpdatedV1` goes to one mapped connection only; clients should discard an older sequence.
+- `GameDeadlineService` checks authoritative engine deadlines every 100 ms and invokes timeouts through the same room gate as player actions. It queues no per-room timers; removed rooms therefore have no scheduled callback to leak.
+- MVP active-match disconnect policy is abandonment: remove the room, notify remaining sockets with `RoomClosed`, and reject all further commands. There is no reconnect or rejoin by room code.
 
 ## Verification commands
 
@@ -38,6 +42,7 @@ From repo root:
 ```powershell
 dotnet run --project tests/Alzheimer.SmokeTests
 dotnet build server/Alzheimer.Server
+dotnet run --project tests/Alzheimer.Server.IntegrationTests
 ```
 
-Add scenario tests for each implemented state transition; do not rely only on the existing 17 utility smoke checks. If test tools or NuGet restore fail, report the limitation exactly.
+Add scenario tests for each implemented state transition; do not rely only on the core smoke suite. The SignalR integration runner starts an in-process Kestrel host and independent .NET client connections. If test tools or NuGet restore fail, report the limitation exactly.

@@ -3,7 +3,7 @@ applyTo: "tests/**"
 ---
 # Testing instructions
 
-Use deterministic, easy-to-run tests. Keep the existing no-external-test-framework smoke runner passing while adding stronger scenario coverage (an isolated test project is acceptable if justified).
+Use deterministic, easy-to-run tests. Keep the existing no-external-test-framework core smoke runner passing while adding stronger scenario coverage. Server gameplay integration tests live in `tests/Alzheimer.Server.IntegrationTests` and use independent SignalR client connections against an in-process Kestrel host.
 
 Required rule scenario matrix as engine functionality is added:
 
@@ -22,3 +22,9 @@ Required rule scenario matrix as engine functionality is added:
 - Unauthorized attempts (another player's hand, stale phase, duplicate actions), private-state redaction, and exact timing at phase deadlines.
 
 For each completed milestone report tests **added**, **run**, **passed/failed**, and scenarios still untested.
+
+Run server integration coverage from the repository root with:
+
+```powershell
+dotnet run --project tests/Alzheimer.Server.IntegrationTests -c Release
+```

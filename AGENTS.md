@@ -12,7 +12,7 @@ This file applies to the **entire repository**. Read it before changing code. Do
 ## Repository map
 
 - `core/Alzheimer.Core/`: pure .NET 10 rules engine with deterministic setup and private peeks, J/Q/K abilities, rank-only reactions, executable final turns, round scoring, draw-exhaustion handling, and match progression through cumulative score 100.
-- `server/Alzheimer.Server/`: ASP.NET Core 10 / SignalR **lobby only**; in-memory rooms; no live gameplay, private card delivery or turn management yet.
+- `server/Alzheimer.Server/`: ASP.NET Core 10 / SignalR authoritative multiplayer server; in-memory rooms with one core engine per active match, versioned commands, serialized actions, private/public projections, and server-controlled deadlines. Unity is not connected.
 - `tests/Alzheimer.SmokeTests/`: executable basic checks. Existing tests do **not** prove gameplay is finished.
 - `client/Alzheimer.Client/`: Unity 6 editor project for an Android portrait client, uGUI prototype and Android build script.
 - `unity/StarterCardTable.cs`: older reference demo; do not duplicate it into the client unless justified.
@@ -23,7 +23,7 @@ This file applies to the **entire repository**. Read it before changing code. Do
 1. Inspect the relevant code, exact Unity `ProjectVersion.txt`, package manifest, README and applicable instructions before editing.
 2. State the smallest coherent milestone and acceptance criteria; implement **one milestone at a time**. Prefer a working vertical slice over a broad scaffold.
 3. Preserve existing code, scenes, Unity `.meta` files and stable GUID references. Use Unity Editor APIs for scene/asset generation, not handwritten serialized scene YAML.
-4. Separate deterministic pure game rules from server authority and from Unity presentation. Avoid putting authoritative game decisions in MonoBehaviours.
+4. Separate deterministic pure game rules from server authority and from Unity presentation. The server calls `AlzheimerRoundEngine`; avoid duplicating rule decisions in Hub methods or Unity MonoBehaviours.
 5. Add or update automated tests for each rule or regression fixed. Run `dotnet run --project tests/Alzheimer.SmokeTests` from repository root; run Unity validation/builds where the Editor is available.
 6. Do not claim any test, Android build, physical-device check or multiplayer scenario passed unless it was actually executed successfully. Report exact commands and remaining blockers.
 7. Do not add a large dependency, change Unity versions, reset project settings, rewrite the app, push to main, or delete existing assets without a clear reason.
@@ -51,6 +51,7 @@ This file applies to the **entire repository**. Read it before changing code. Do
 - Assign unique physical card IDs across multiple decks; store hand positions and each player's knowledge explicitly. King swaps invalidate received-card knowledge.
 - Use serialized per-room action processing / locking; define server-authoritative UTC deadlines and atomic invalid-throw penalties. Never trust client-supplied card values, scores or clocks.
 - Treat room passwords, player names, reconnect tokens and eventual authentication as untrusted inputs. Keep guest lobby features clearly distinguished from production security.
+- Gameplay connections map to stable room player IDs; never trust a client-supplied acting-player ID. Public and per-player projections must stay separate. Active-match disconnect abandons and removes the whole room; reconnect is unsupported.
 
 ## Unity P0 verification status
 

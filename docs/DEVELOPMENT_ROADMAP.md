@@ -1,6 +1,6 @@
 # Alzheimer — implementation roadmap and verified status
 
-**Status updated:** 2026-11-25 on the P2C final-turn/scoring worktree. P0 device smoke-test status is owner-reported; P1/P2A/P2B validation reflects commands run for those milestones, and P2C results are recorded below.
+**Status updated:** 2026-11-25 on `feat/p3a-multiplayer-server`. P0 device smoke-test status is owner-reported; P1/P2A/P2B/P2C validation reflects commands run for those milestones, and P3A results are recorded below.
 
 ## Already present (by code inspection)
 
@@ -12,9 +12,9 @@
 - [x] P2A Jack, Queen, and King abilities with injected-clock 30-second ability deadlines, private-safe projections, Queen reaction metadata, and deterministic timeout handling.
 - [x] P2B rank-only multiplayer reactions with persistent Queen matching, per-player Done, authoritative 30-second deadlines, invalid-throw penalties, privacy-safe projections, and automatic reaction calls.
 - [x] P2C executable final turns, exhaustion-aware round scoring, cumulative match completion, fresh round resets, structured score/reveal projections, and deterministic full-match simulation.
-- [x] Lightweight .NET 10 GitHub Actions workflow for core/server builds and smoke/game-engine tests; Unity/Android builds are excluded.
+- [x] P3A authoritative SignalR gameplay with stable room-player mapping, per-room engine serialization, private/public projections, deadline processing, disconnect cleanup, and a real two-client full-match integration scenario.
+- [x] Lightweight .NET 10 GitHub Actions workflow for core/server builds plus smoke/game-engine and SignalR integration tests; Unity/Android builds are excluded.
 - [ ] Connected Unity online lobby/client (not implemented).
-- [ ] Authoritative multiplayer gameplay (the server remains lobby-only).
 - [x] Owner-confirmed Android build installed and launched on a physical phone (reported 2026-11-25; not independently reproduced in this work session).
 
 ## P0 — stabilize the Unity prototype
@@ -46,7 +46,7 @@
 - `CompleteReactionWindow()` remains a trusted progression hook and refuses to close an early window; it closes only after the authoritative deadline. All players marking Done closes the window immediately.
 - `IGameClock` supplies transition timestamps plus P2A ability and P2B reaction deadlines. `ProcessTimeouts()` expires due ability/reaction windows, and each action checks for elapsed deadlines before validation.
 - `ThrowReactionCard` and `MarkReactionDone` carry the active reaction-window ID and a unique command ID. The engine rejects stale/replayed commands, validates actual server-owned card ranks, and is intentionally synchronous; a future server must serialize each room's commands.
-- P3 will connect room creation/lifecycle to match lifecycle. P1 does not change `LobbyHub` or create a live network game.
+- The P3A server now uses this contract; Unity remains disconnected until P3B.
 
 ## P2A — special-card abilities and .NET CI
 
@@ -55,7 +55,7 @@
 3. [x] Enforce exact 30-second ability deadlines using the injected UTC game clock, including deterministic expiry before accepting a late resolution.
 4. [x] Add deterministic ability/privacy/conservation tests and a .NET-only GitHub Actions workflow.
 
-**P2A acceptance:** implemented in the pure C# engine. The API remains disconnected from live SignalR gameplay. The no-target choice policy is tested directly; P2C now executes final turns through the ordinary draw/resolution/ability flow.
+**P2A acceptance:** implemented in the pure C# engine. At that milestone the API was disconnected from SignalR; P3A now consumes its actions. The no-target choice policy is tested directly; P2C executes final turns through the ordinary draw/resolution/ability flow.
 
 ## P2B — reaction gameplay (complete)
 
@@ -65,7 +65,7 @@
 4. [x] Automatically register a first empty-hand reaction caller, stop reactions immediately, preserve active-seat context, and record subsequent-turn player order for P2C execution.
 5. [x] Cover matching/nonmatching/suit-only attempts, multiple throws, unknown-card guesses, Queen exception/final top, Done/deadlines, penalties/depletion, privacy, command replays, automatic calls, and card conservation with deterministic smoke scenarios.
 
-**P2B acceptance:** complete in the pure C# engine. Actions are synchronous and must be serialized per room by future server integration; no SignalR gameplay, persistence, or Unity work is included. P2C consumes `RequiredFinalTurnPlayerIds`; `RoundPenaltyPoints` feed round scoring.
+**P2B acceptance:** complete in the pure C# engine. Actions are synchronous and are now serialized per room by P3A; no persistence or Unity work is included. P2C consumes `RequiredFinalTurnPlayerIds`; `RoundPenaltyPoints` feed round scoring.
 
 ## P2C — final turns, round scoring, and match progression (complete)
 
@@ -76,17 +76,27 @@
 5. [x] Expose structured round scores/reason/cumulative scores/winners/final-turn queues and reveal hands only after round scoring.
 6. [x] Add deterministic 2–10 player voluntary-call scenarios, four-player automatic-call ordering, final abilities/timeouts, depletion/penalty cases, score-rule variants, reset checks, idempotency checks, and a complete multi-round match simulation.
 
-**P2C acceptance:** complete for the pure C# engine. No new rule ambiguity was found; edge timing follows rulebook v1.1. The server remains lobby-only, and P2C does not imply SignalR/Unity gameplay integration.
+**P2C acceptance:** complete for the pure C# engine. No new rule ambiguity was found; edge timing follows rulebook v1.1. P2C did not itself implement SignalR/Unity integration; P3A now provides server gameplay, while Unity remains out of scope.
 
-## P3 — connected lobby + game UI
+## P3A — authoritative multiplayer server (implemented)
 
-1. Define versioned public/private snapshots and action/result contracts from the P2C core projections; add per-room serialized engine ownership and authoritative timeout scheduling.
-2. Connect Unity to the existing lobby using an Android IL2CPP-compatible transport; verify Create/Join/Leave and host settings/player roster with two clients.
-3. Start a server-owned match and map trusted player IDs to `ProcessAction`; deliver public views to the room and private views only to the entitled player. Do not send internal engine state.
-4. Add reconnect/room cleanup behavior, stale action/window protection, and integration tests for concurrent submissions and deadlines.
-5. Validate complete rounds on two clients, then complete a full match before claiming P3 gameplay acceptance.
+1. [x] Keep one authoritative `AlzheimerRoundEngine` per active room; preserve lobby methods/settings/seating, host-only match start, and reject active-match joins/duplicate starts.
+2. [x] Define fixed `GameplayCommandV1` payloads and versioned responses/events; derive the actor from connection membership, allowlist command-to-core mappings, reject duplicate IDs and stale reaction windows, and expose monotonic state sequences.
+3. [x] Deliver public engine projections to the room and private projections only to mapped player connections; no internal game state or opponents' pending/hidden cards are sent.
+4. [x] Serialize player actions, timeouts, start, join, and leave operations per room. A single hosted deadline worker checks core UTC deadlines every 100 ms through the same room gate; it holds no per-room timer callbacks.
+5. [x] Define disconnect MVP: any active-match disconnect abandons and removes the entire room; remaining players receive `RoomClosed`. No reconnect, room-code rejoin, or identity recovery is supported. Empty lobby rooms are removed immediately.
+6. [x] Add an in-process Kestrel SignalR test with independent clients. It validates lobby/start authorization, private peek serialization, Jack and King privacy, duplicate/stale/unauthorized commands, concurrent throws, server-driven reaction and ability expiry, room isolation/disconnection, a complete scored round, and match completion.
+7. [x] Add the integration runner to `.github/workflows/dotnet.yml`; GitHub Actions status remains unverified until the workflow runs remotely.
 
-**P3 acceptance:** at least two clients complete a real round using the server and observe consistent, private information.
+**P3A acceptance:** the local server integration runner passed with two gameplay clients completing actual core-scored rounds through match completion and observing authorized public/private state. This does not claim Unity transport, production authentication, reconnect support, or a successful remote CI run.
+
+## P3B — Unity multiplayer client (not started)
+
+1. Select an Android/IL2CPP-compatible SignalR client transport (or choose and version a native WebSocket protocol); verify package/AOT compatibility before adding dependencies.
+2. Add Unity lobby Create/Join/Leave UI and map the server's stable room player ID to the local connection session. Do not trust client-supplied actor IDs.
+3. Start matches via `StartMatchV1`, submit `GameplayCommandV1`, and apply only public events plus the current player's `GamePrivateStateUpdatedV1`; discard stale update sequences.
+4. Add reconnect UX only after an explicit identity/authentication policy exists; current P3A disconnect behavior abandons the match.
+5. Verify Android Editor/IL2CPP builds, two-device transport, privacy, touch interaction, and a full match before claiming P3B complete.
 
 ## P4 — release readiness
 
@@ -97,10 +107,10 @@
 
 - `SceneBootstrap.cs` now subscribes to scene loads and rebuilds only the active prototype screen, while deduplicating runtime UI and using `InputSystemUIInputModule`; Unity Editor validation remains required.
 - `manifest.json` declares `com.unity.inputsystem`; Package Manager import and package-lock restoration remain to be confirmed by Unity.
-- `NetworkManager.Connect` explicitly reports no real network transport; `LobbyHub` is lobby-only.
+- `NetworkManager.Connect` explicitly reports no real network transport; `LobbyHub` now hosts authoritative SignalR game commands, but Unity does not connect to it yet.
 - `MainMenu` Create/Join/Settings are placeholder status actions.
 - `GameTableScreen` draws four placeholders and starts/stops its timer immediately; it has no actual gameplay mechanics.
-- `.github/workflows/dotnet.yml` runs .NET restore, core/server builds, and the smoke/game-engine test executable on pushes and pull requests targeting `main`; it intentionally has no Unity or Android build.
+- `.github/workflows/dotnet.yml` now restores/builds the .NET projects and runs both the core smoke suite and SignalR integration executable on pushes and pull requests targeting `main`; it intentionally has no Unity or Android build.
 
 ## Update policy
 
@@ -129,3 +139,12 @@ When completing a milestone, link its commit/PR, add the validation command/resu
 - The deterministic full-match test completed through two exhausted rounds to match end. Seed 1901: round 1 P1 43→86 (cumulative 86), P2 24→48; round 2 P1 26→52 (cumulative 138), P2 54→108 (cumulative 156); P1 won. Round resets preserved host/player identity while using new card IDs and resetting private knowledge.
 - Unity Editor/tests, Android APK build, SignalR gameplay, persistence, and two-client multiplayer were not run; they are outside P2C. The Android device confirmation remains owner-reported only.
 - No unresolved rule ambiguity was found in the implemented P2C paths; the canonical v1.1 rulebook was unchanged.
+
+### P3A validation run (2026-11-25)
+
+- Confirmed `feat/p3a-multiplayer-server` is checked out, clean at task start, and based on `main`; P2C commit `bca1993` is an ancestor of `main`.
+- `dotnet run --project tests/Alzheimer.SmokeTests -c Release` — passed; 1,869 assertions.
+- `dotnet build core/Alzheimer.Core -c Release --no-restore` and `dotnet build server/Alzheimer.Server -c Release --no-restore` — passed; both with 0 warnings and 0 errors.
+- `dotnet run --project tests/Alzheimer.Server.IntegrationTests -c Release --no-restore` — passed; 214 assertions over five independent SignalR client connections, including full two-player match completion.
+- The integration scenario uses a controllable core clock and seeded deck; ability and reaction deadlines were advanced without waiting 30 real seconds. It inspected the serialized public/private SignalR event objects for hidden card IDs.
+- Final `git diff --check` passed. GitHub Actions has not run. Unity/Android builds, Unity transport, production authentication, and reconnect were not run.

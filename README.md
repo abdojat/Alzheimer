@@ -5,7 +5,7 @@ A starter implementation for the customized Alzheimer multiplayer card game. Inc
 - The confirmed v1.1 rulebook under `docs/`.
 - A pure C# rules library with deterministic P1/P2A/P2B/P2C gameplay, final turns, exhaustion-aware scoring, and match progression.
 - A no-NuGet-dependency smoke test console app covering utility, rules, regression, privacy, and deterministic full-match scenarios.
-- An ASP.NET Core 10 + SignalR **lobby-only** server (create/join rooms and player lists). The server does **not** yet implement game turns, private card delivery, timers, or online card actions.
+- An ASP.NET Core 10 + SignalR authoritative multiplayer server with per-room game engines, versioned gameplay commands, private/public projections, serialized actions, and server-controlled deadlines.
 - A small **local UI smoke test** Unity MonoBehaviour. This is *not* a functional game.
 
 ## Requirements
@@ -89,19 +89,19 @@ Apply("guest", new MarkReactionDone(guestReactionWindow, Guid.NewGuid()));
 
 `EndTurn` opens a 30-second reaction window using the injected authoritative UTC clock. `PublicGameView` exposes the window ID, deadline, and Done players; all players may submit `ThrowReactionCard(handIndex, reactionWindowId, commandId)` repeatedly, or mark themselves Done once with `MarkReactionDone(reactionWindowId, commandId)`. A unique command ID prevents replay, and the window ID rejects stale submissions. Throws use server-owned card ranks, match rank only against the ordinary current top, and never activate abilities. A wrong attempt leaves that card in place, privately reveals it to its owner, and immediately adds an unknown penalty card, or records +10 round-penalty points when the draw pile is empty.
 
-Queen's two matching ranks persist for the full reaction window, and its selected card is restored to the pile top when the window closes. A successful throw that empties a hand records the automatic caller, closes reactions immediately, and preserves the active seat plus the required subsequent-turn order; Queen-empty-hand calls still cancel the upcoming window. `CompleteReactionWindow()` is a trusted progression hook that refuses to close an early window; the engine also processes due deadlines through `ProcessTimeouts()` and before accepting actions. The engine is synchronous, not thread-safe: production server code must serialize per-room commands and call timeouts from server-owned scheduling. These APIs are not wired to SignalR, and no transport, persistence, or Unity gameplay is included.
+Queen's two matching ranks persist for the full reaction window, and its selected card is restored to the pile top when the window closes. A successful throw that empties a hand records the automatic caller, closes reactions immediately, and preserves the active seat plus the required subsequent-turn order; Queen-empty-hand calls still cancel the upcoming window. `CompleteReactionWindow()` is a trusted progression hook that refuses to close an early window; the engine also processes due deadlines through `ProcessTimeouts()` and before accepting actions. The engine is synchronous and not thread-safe; the server serializes actions and timeout transitions through a per-room gate.
 
 After a voluntary or automatic call, `FinalPhase` identifies the next eligible player who must draw. `RequiredFinalTurnPlayerIds` records the complete clockwise schedule and `PendingFinalTurnPlayerIds` advances as turns are completed. Final turns reuse mandatory draw, keep/discard/replace and J/Q/K ability processing; `CallAlzheimer` is disabled and `EndTurn` advances directly without a reaction window. The caller is skipped. When a reaction throw causes the call, the active player's in-progress turn is not counted as their subsequent turn.
 
 The last normal draw resolves before the call/end decision; an uncalled last-card turn still opens its reaction window. A final-card penalty does not close an active reaction window, and each later undrawn penalty adds 10 points. On completion, `RoundScorer` sums hand values and penalties before applying the caller-specific or no-caller depletion doubling. `PublicGameView.LastCompletedRound` contains base/adjusted/cumulative scores, reason, caller, required/pending final-turn IDs, and the end-of-round hand reveal; hand identities remain private before scoring. If no cumulative score reaches 100, a fresh shuffled deck and private-knowledge reset start the next round with the same host/seating. At or above 100, `MatchCompleted` and `WinnerPlayerIds` expose the lowest cumulative-score winner(s).
 
-The core now simulates full matches but remains disconnected from SignalR: the server is lobby-only, and no transport, persistence, or Unity gameplay is included.
+The core remains the only rules engine; SignalR invokes it through an authoritative per-room server coordinator. The Unity client is not yet connected.
 
 ## GitHub Actions CI
 
-`.github/workflows/dotnet.yml` restores the .NET projects, builds `Alzheimer.Core` and `Alzheimer.Server`, and runs the smoke/game-engine tests on pushes and pull requests targeting `main`. Unity Editor and Android builds are intentionally excluded to keep CI lightweight.
+`.github/workflows/dotnet.yml` restores the .NET projects, builds `Alzheimer.Core` and `Alzheimer.Server`, and runs the smoke/game-engine and SignalR integration test executables on pushes and pull requests targeting `main`. Unity Editor and Android builds are intentionally excluded to keep CI lightweight.
 
-## Run the starter lobby server
+## Run the authoritative multiplayer server
 
 ```bash
 dotnet run --project server/Alzheimer.Server -- --urls http://localhost:5050
@@ -111,15 +111,41 @@ Open `http://localhost:5050/health` and expect a JSON response with `status` set
 
 SignalR hub route: `http://localhost:5050/hubs/lobby`.
 
-Hub methods (intended for an appropriate compatible client):
+Lobby methods:
 
 - `CreateRoom(int deckCount, int maxPlayers, string playerName)` -> lobby snapshot and joins its group; 1–4 decks, 2–10 player capacity.
 - `JoinRoom(string code, string playerName)` -> joins a room, returns a lobby snapshot.
 - `LeaveRoom()` -> leaves current room.
 
-Hub events: `RoomUpdated` and `RoomClosed`. The server uses in-memory state and connection IDs. This is not production-ready: no authentication, persistent rooms, reconnect handling, rate limiting or durable game state.
+Gameplay methods:
 
-> The Unity client is not yet wired to SignalR. Establish an Android-compatible client transport and verify its AOT/IL2CPP behavior before relying on a particular SignalR client package in Unity. A native WebSocket message protocol is an alternative.
+- `StartMatchV1()` -> host-only start response. Requires at least two connected players; duplicate starts and joins during an active match are rejected.
+- `SubmitGameplayCommandV1(GameplayCommandV1)` -> version-1, explicitly allowlisted core action. Actor identity comes from the current SignalR connection's room membership, not the payload.
+
+`GameplayCommandV1` contains `ProtocolVersion`, unique `CommandId`, `Action`, and only the action-specific fields (`FirstHandIndex`, `SecondHandIndex`, `HandIndex`, `TargetPlayerId`, `TargetHandIndex`, `ReactionWindowId`). Supported actions are initial peek, draw, discard, replace, ability activate/resolve (Jack/Queen/King), call Alzheimer, end turn, reaction throw, and reaction Done. It has no client-supplied card rank, score, deck state, deadline, or acting player ID. Responses carry accepted/error status, events, public view, and only the caller's private view.
+
+Server-to-client events:
+
+- `RoomUpdated` and `RoomClosed` retain lobby behavior.
+- `MatchStartedV1` and `GameStateUpdatedV1` deliver `GamePublicUpdateV1` to the room group.
+- `GamePrivateStateUpdatedV1` delivers `GamePrivateUpdateV1` directly to its entitled connection only.
+- Public and private updates carry a monotonically increasing `Sequence`; clients should ignore stale lower-sequence updates. The public projection reveals hands only when the core's round-completion projection permits it.
+
+Each active room owns one `AlzheimerRoundEngine`; its `SemaphoreSlim` serializes start, commands, timeout processing, and room lifecycle mutations. The deadline service checks engine-owned UTC deadlines every 100 ms and runs due transitions through that same gate. There are no independent per-room timer callbacks to retain after room cleanup. Network sends happen after the room gate is released.
+
+Player IDs are random stable seat identities for the lifetime of a room and are distinct from SignalR connection IDs. This MVP has no authentication or reconnection: a disconnect during an active match abandons/removes the whole room, sends `RoomClosed` to remaining members, and revokes their ability to issue commands. Joining by the old room code does not restore access. Lobby rooms remain in-memory; no persistence or production identity security is provided.
+
+Typical two-client session: host calls `CreateRoom`, guest calls `JoinRoom`, host calls `StartMatchV1`, both submit `PeekInitialCards`, and the active player submits `DrawCard` followed by a supported resolution and `EndTurn`. Each room member can then submit `ThrowReactionCard` or `MarkReactionDone` using the active reaction-window ID. The server drives the next turn or timeout.
+
+Run the reproducible two-game-client SignalR full-match scenario (the runner also creates helper clients for lifecycle and multi-room checks):
+
+```bash
+dotnet run --project tests/Alzheimer.Server.IntegrationTests -c Release
+```
+
+It starts an in-process Kestrel server, connects independent .NET SignalR clients, and validates private serialized projections, gameplay actions, concurrency, deadlines, room isolation/disconnection, a complete scored round, and match completion without real-time timer waits. The same runner is included in `.github/workflows/dotnet.yml`; GitHub CI must run after push before its status can be claimed.
+
+> Unity connectivity is P3B: select and verify an Android/IL2CPP-compatible SignalR transport (or an explicitly versioned native WebSocket protocol), map the room's stable player ID to the local client session, and render only the authorized projections. No Unity network transport or multiplayer UI is implemented here.
 
 ## Create the Unity application
 
